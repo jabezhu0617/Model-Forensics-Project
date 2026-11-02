@@ -1,0 +1,79 @@
+% Compile with: pdflatex main_figure.tex
+\documentclass[border=10pt]{standalone}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, backgrounds, calc}
+
+% Angel/devil emoji icons (Twemoji, CC-BY 4.0)
+\newcommand{\goodroboticon}{\raisebox{-0.2\height}{\includegraphics[height=10mm]{angel.pdf}}}
+\newcommand{\badroboticon}{\raisebox{-0.2\height}{\includegraphics[height=10mm]{devil.pdf}}}
+
+\begin{document}
+\begin{tikzpicture}[
+    % Pipeline / outcome boxes
+    box/.style={rectangle, rounded corners=4pt, draw=black!60, fill=black!5,
+                minimum width=28mm, minimum height=14mm, align=center,
+                font=\large\sffamily},
+    boxhi/.style={rectangle, rounded corners=4pt, draw=black!80, fill=blue!8,
+                  thick, minimum width=34mm, minimum height=14mm, align=center,
+                  font=\large\sffamily},
+    arrow/.style={-{Stealth[length=3mm]}, thick, black!60},
+    zoom/.style={dashed, thick, black!50},
+    % Protocol step boxes
+    protostep/.style={rectangle, rounded corners=3pt, draw=black!60, fill=white,
+                 minimum width=46mm, minimum height=12mm, align=center,
+                 font=\normalsize\sffamily, inner sep=2mm},
+    label/.style={font=\Large\sffamily\bfseries, black!70},
+    note/.style={font=\footnotesize\sffamily\itshape, black!70, align=center},
+  ]
+
+  % ─────────── CENTER: Incrimination protocol box ───────────
+  \node[label, align=center] (zoom-title) at (0,0)
+        {Model Forensics\\{\large\mdseries Investigation protocol}};
+
+  \node[protostep, below=2mm of zoom-title] (s1)
+    {\textbf{Step 1: Read CoT}};
+
+  \node[protostep, below=4mm of s1] (s2)
+    {\textbf{Step 2: Environment Interventions}};
+
+  % Sequential arrow + iterate arrow between the two steps
+  \draw[arrow] (s1) -- (s2);
+  \draw[arrow, dashed, bend right=25]
+    (s2.east) to node[font=\large\sffamily, midway, right=1mm, black!60]
+    {iterate} (s1.east);
+
+  % Container fit around the contents (drawn behind so contents stay visible)
+  \begin{scope}[on background layer]
+    \node[rectangle, rounded corners=5pt, draw=black!80, thick, fill=blue!3,
+          fit=(zoom-title) (s1) (s2),
+          inner xsep=18mm, inner ysep=3mm] (zoombox) {};
+  \end{scope}
+
+  % ─────────── RIGHT: two outcome boxes (incriminate / exonerate) ───────────
+  \node[box, fill=red!10, anchor=north west, minimum width=72mm] (incriminate)
+    at ([xshift=14mm]zoombox.north east)
+    {\badroboticon\\Intentional subversion};
+  \node[box, fill=green!10, anchor=south west, minimum width=72mm] (exonerate)
+    at ([xshift=14mm]zoombox.south east)
+    {\goodroboticon\\Genuinely reducing latency};
+
+  % ─────────── LEFT: "Caught" box with title + image ───────────
+  \node[
+      rectangle, rounded corners=4pt, draw=black!60, fill=black!5,
+      align=center, font=\large\sffamily,
+      inner sep=2mm,
+      anchor=east
+    ] (behavior)
+    at ([xshift=-14mm]zoombox.west)
+    {Caught: model makes a code change that reduces human oversight\\[2mm]
+     \includegraphics[width=115mm]{ai_unsafe_code_diff.pdf}};
+
+  % Pipeline arrows: Caught → Protocol, Protocol → {Exonerate, Incriminate}
+  \draw[arrow] (behavior.east) -- (zoombox.west);
+  \draw[arrow] (zoombox.east) -- (exonerate.west);
+  \draw[arrow] (zoombox.east) -- (incriminate.west);
+
+\end{tikzpicture}
+\end{document}

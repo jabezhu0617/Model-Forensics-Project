@@ -1,0 +1,26 @@
+## LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.pdf
+!figures/main_figure/*.pdf
+!reproduce/plots/*.pdf
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+
+# IDE
+.cursor/
+.vscode/
+
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+*.pyc
+
+# Rollout data (~1.2 GB after trimming) — fetched from HF, not committed
+results/*
+!results/.gitkeep
