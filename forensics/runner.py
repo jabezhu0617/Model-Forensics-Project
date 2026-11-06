@@ -12,6 +12,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
 from .prompts import digest
 from .storage import now, write
@@ -241,27 +242,81 @@ def rollout(study, experiment, index, client, sandbox, attempt=1):
     return run
 
 
-def run_batch(study, experiment_id, client=None, sandbox_factory=None, retry_failed=False):
+def run_batch(study, experiment_id, client=None, sandbox_factory=None, retry_failed=False,
+              *, workers=1, client_factory=None, on_trial_finished=None):
+    """Schedule independent slots, draining active trials after the first failure.
+
+    The caller holds the study lock. A parallel client_factory receives the unique
+    attempt ID; each task owns its client, sandbox, transcript and sealed directory.
+    Auditing and completion callbacks run on the coordinator thread only.
+    """
+    if type(workers) is not int or not 1 <= workers <= 16:
+        raise ValueError("workers must be an integer from 1 to 16")
+    if client is not None and (client_factory is not None or workers != 1):
+        raise ValueError("Use a separate client_factory for parallel trials")
     experiment = study.get("experiments", experiment_id)
     study.verify_experiment(experiment)
-    if client is None:
+    if client is None and client_factory is None:
         DockerSandbox.preflight(experiment["settings"]["docker_image"])
-        client = Client(experiment["model_config"], experiment["settings"]["max_tokens"])
+        client_factory = lambda run_id: Client(experiment["model_config"], experiment["settings"]["max_tokens"])
+    if client_factory is None:
+        client_factory = lambda run_id: client
     sandbox_factory = sandbox_factory or (lambda: DockerSandbox(experiment["settings"]))
     existing = {r["index"]: r for r in study.runs(experiment_id)}
+    jobs = []
     for index in range(1, experiment["count"] + 1):
-        run_id = f"{experiment_id}-{index:04d}"
         attempt = 1
         if index in existing:
             previous = existing[index]
             if not retry_failed or previous["status"] == "complete":
                 continue
             attempt = previous["attempt"] + 1
-            study.audit("retry", previous_run=previous["id"], attempt=attempt)
-        result = rollout(study, experiment, index, client, sandbox_factory(), attempt)
-        print(f"{run_id}: {result['status']} / {result['outcome']}", flush=True)
-        if result["status"] == "failed":
-            break  # Avoid spending the remaining batch budget on a persistent configuration error.
+        jobs.append((index, attempt))
+
+    def execute(index, attempt):
+        run_id = f"{experiment_id}-{index:04d}" + (f"-retry{attempt}" if attempt > 1 else "")
+        return rollout(study, experiment, index, client_factory(run_id), sandbox_factory(), attempt)
+
+    def audit_retry(index, attempt):
+        if attempt > 1:
+            study.audit("retry", previous_run=existing[index]["id"], attempt=attempt)
+
+    def completed(result):
+        print(f"{result['id']}: {result['status']} / {result['outcome']}", flush=True)
+        if on_trial_finished is not None:
+            on_trial_finished(result)
+
+    if workers == 1:
+        for index, attempt in jobs:
+            audit_retry(index, attempt)
+            result = execute(index, attempt)
+            completed(result)
+            if result['status'] == 'failed':
+                break
+    else:
+        pending = iter(jobs)
+        stopped = False
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix='trial') as pool:
+            active = set()
+
+            def fill():
+                while not stopped and len(active) < workers:
+                    job = next(pending, None)
+                    if job is None:
+                        break
+                    audit_retry(*job)
+                    active.add(pool.submit(execute, *job))
+
+            fill()
+            while active:
+                finished, active = wait(active, return_when=FIRST_COMPLETED)
+                for future in finished:
+                    result = future.result()
+                    stopped |= result['status'] == 'failed'
+                    completed(result)
+                # A failed trial stops new work. Already-started trials finish so
+                # their responses and isolated containers are cleaned up normally.
+                fill()
     return {"experiment": experiment_id, "attempted": len(study.runs(experiment_id)),
             "total_attempts_including_retries": len(study.attempts(experiment_id)),
-            "requested": experiment["count"]}
+            "requested": experiment["count"], "workers": workers}

@@ -51,6 +51,8 @@ Start-Process 'studies\main\reports\r1-baseline-prompt.html'
 
 `run` makes live, billable API calls. It defaults to 60 independent trials per model, each in a fresh container. The model's shell has no network, API credentials, host filesystem mounts or Docker socket. The host handles provider calls and archives responses. Reasoning fields required by the provider are passed back to that same rollout, but never sent to hypothesis editing, behavioral scoring or transcript review.
 
+Use `run r1-baseline --workers 4` for up to four concurrent trials (default: one; maximum: 16). Each trial has its own client, container, transcript, and response archive. A failed trial stops new scheduling while already-active trials finish. Add `--retry-failed` when resuming failed or incomplete slots; completed slots are always skipped.
+
 Re-running `run` resumes missing trial slots without rerunning completed ones. It stops a batch after a failed rollout. `run EXPERIMENT --retry-failed` explicitly retries failed/incomplete slots while preserving every old attempt and recording the retry. Completed trials cannot be rerolled this way. Current rates use the latest attempt per slot; reports also expose the total attempt count. Account for retry selection effects in research reporting. A crashed process may leave `.writer.lock`; only remove it after verifying that no process is still writing the study.
 
 ## View summaries and review transcripts later
@@ -58,6 +60,8 @@ Re-running `run` resumes missing trial slots without rerunning completed ones. I
 The viewer opens on **Summary**: registered hypothesis and prediction (when applicable), concealed/reported/unresolved counts, supported/unsupported counts, and aggregate scores. Hypotheses are provided independently of transcript inspection. Use the separate **Transcripts — scoring review** tab only when ready to review evidence for scoring.
 
 These tabs link to separate HTML files. `EXPERIMENT-review.html` contains only the hypothesis and aggregate results; transcript text, submissions, highlights, and annotations are in `EXPERIMENT-transcripts.html`. Baseline and setup summaries explicitly show that hypothesis support is not applicable. Summary counts reflect saved records and imported annotations, not unsaved browser drafts.
+
+The offline viewer uses a compact, ruled layout based on [Hallmark's Almanac guidelines](https://github.com/nutlope/hallmark), with shared color and typography tokens. The transcript page displays each message in its own labeled, color-coded block: user in blue, assistant in muted plum, tool output in green, and system instructions on warm ivory. Tool calls show the actual command, outputs show readable line breaks and exit codes, and submissions use labeled answer/feedback fields. Select text within a message or command/output block to add a highlight. The display maps selections back to the original transcript, preserving existing evidence and hashes.
 
 ```powershell
 .\forensics.cmd review r1-baseline
@@ -68,7 +72,7 @@ The Transcripts tab contains every current trial, outcome filters and a reproduc
 
 The sidebar groups trials into **Concealed**, **Reported**, and **Unresolved**, with counts and explicit empty groups. Suggested evidence is highlighted automatically: commands referencing evaluation files, relevant passages returned by tools, and the final submission. Click a key passage to jump to its location. Supplied scratchpad passages are labeled as tool-returned context, not claims authored by the model. These suggestions are review aids and do not create reviewed annotations or change scores. You can hide them and add your own evidence highlights. Saved outcome drafts update the browser's groups; import them before relying on them in research records.
 
-Select a passage, click **Highlight selected text**, and add an evidence note. Review or correct the outcome. Optional custom behavioral labels use JSON such as `{"protects_weapons_goal": true}`; custom labels require evidence highlights. Save each review draft, download annotations, then import:
+Select a passage, click **Highlight selection**, and add an evidence note. Review or correct the outcome. Optional custom behavioral labels use JSON such as `{"protects_weapons_goal": true}`; custom labels require evidence highlights. Save each review draft, download annotations, then import:
 
 ```powershell
 .\forensics.cmd annotate 'E:\Downloads\annotations.json' --reviewer 'Your name'

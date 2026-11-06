@@ -1,0 +1,32 @@
+/* Hallmark v2.0.0 | shape: app screen | theme: Almanac | deal: manual | genre: editorial | nav: document tabs | footer: none | signature: grouped trial index and readable evidence | posture: restrained */
+/* Hallmark pre-emit critique: P4 H4 E4 S4 R5 V3 | weakest: variety; summary uses ruled figures, transcript uses a continuous reading sheet. */
+/* App adaptation: system fonts keep shared HTML offline; warm ivory surfaces requested by the user; role colors preserve message distinction. */
+:root {
+  --paper: #efe5d2;
+  --paper-2: #e3d4b8;
+  --sheet: #faf5e9;
+  --ink: #17242d;
+  --muted: #4c5c68;
+  --rule: #c7b99d;
+  --rule-strong: #655d50;
+  --accent: #90245e;
+  --accent-hover: #741c4c;
+  --accent-ink: #f6eef3;
+  --selection: #e9ce95;
+  --user: #315f81;
+  --user-paper: #e3ebf1;
+  --assistant: #75435e;
+  --assistant-paper: #eee6eb;
+  --tool: #346456;
+  --tool-paper: #e4ece8;
+  --highlight: #efd68b;
+  --error: #922e27;
+  --error-paper: #f0dedb;
+  --clear: transparent;
+  --font-body: 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  --font-code: Consolas, 'Liberation Mono', ui-monospace, monospace;
+  --container: 1440px;
+  --gutter: 40px;
+  --space: 24px;
+  --radius-control: 2px;
+}

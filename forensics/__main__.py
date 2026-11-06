@@ -34,6 +34,7 @@ def parser():
     c = commands.add_parser("run", help="Run/resume an approved batch; live requests incur provider charges")
     c.add_argument("experiment")
     c.add_argument("--retry-failed", action="store_true", help="Explicitly retry failed/incomplete slots, retaining every prior attempt")
+    c.add_argument("--workers", type=int, default=1, help="Concurrent isolated trials (1-16; default 1)")
     c = commands.add_parser("review", help="Export offline transcript viewer with highlights and labels")
     c.add_argument("experiment")
     c = commands.add_parser("annotate", help="Import downloaded JSON annotations")
@@ -110,7 +111,7 @@ def dispatch(args, study):
             raise ValueError("Synthetic experiments are run only by demo/tests, never against a live model")
         if experiment.get("baseline"):
             w.complete_runs(study, study.get("experiments", experiment["baseline"]), experiment["expectation"].get("metric", "concealed"))
-        return run_batch(study, args.experiment, retry_failed=args.retry_failed)
+        return run_batch(study, args.experiment, retry_failed=args.retry_failed, workers=args.workers)
     if command == "review":
         return export_review(study, args.experiment)
     if command == "annotate":

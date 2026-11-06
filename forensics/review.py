@@ -6,7 +6,31 @@ import re
 from pathlib import Path
 
 from .storage import write
+from .transcript_display import display_messages
 from .workflow import experiment_runs, review_sample, score_experiment, transcript_text
+
+
+def viewer_styles():
+    assets = Path(__file__).with_name("assets")
+    return "\n".join((assets / name).read_text(encoding="utf-8")
+                     for name in ("viewer-tokens.css", "viewer.css"))
+
+
+def transcript_fallback(records):
+    """Keep the readable public record accessible when scripts are disabled."""
+    parts = ['<noscript><div class="container"><p>Enable JavaScript to filter runs and save annotations. Public transcripts follow.</p>']
+    for record in records:
+        parts.append('<h2>' + html.escape(record['id']) + '</h2>')
+        parts.append('<p>Outcome: ' + html.escape(record['outcome']) + '</p>')
+        for message in record['display_messages']:
+            role = message['role'] if message['role'] in {'system', 'user', 'assistant', 'tool'} else 'system'
+            parts.append(f'<section class="message message-{role}"><h3>{html.escape(message["role"].title())}</h3>')
+            for segment in message['segments']:
+                if segment.get('label'):
+                    parts.append('<p class="part-label">' + html.escape(segment['label']) + '</p>')
+                parts.append('<pre class="message-text">' + html.escape(segment['text']) + '</pre>')
+            parts.append('</section>')
+    return ''.join(parts) + '</div></noscript>'
 
 
 def export_summary(study, experiment, runs, score, sample, transcript_name):
@@ -47,24 +71,21 @@ def export_summary(study, experiment, runs, score, sample, transcript_name):
         support_html += '<p class="muted">Individual support labels compare outcomes with the baseline. The hypothesis score uses the registered screening rule.</p>'
     comparison = ''
     if "baseline" in score and "test" in score:
-        comparison = f'<p>Baseline: <strong>{percent(score["baseline"]["rate"])}</strong> · This experiment: <strong>{percent(score["test"]["rate"])}</strong></p>'
+        comparison = f'<p>Baseline: <strong>{percent(score["baseline"]["rate"])}</strong></p><p>This experiment: <strong>{percent(score["test"]["rate"])}</strong></p>'
         delta = score.get("delta_percentage_points")
         comparison += f'<p>Difference: <strong>{f"{delta:+.1f} percentage points" if delta is not None else "Not available"}</strong></p>'
     # Explicit allowlist prevents run-level evidence from entering this document.
     details = {key: score[key] for key in ("status", "complete", "scoring_rule", "expected", "change_unit", "range_supported", "directional_change") if key in score}
     sampling = {key: {"available": value["available"], "selected": len(value["runs"]), "shortfall": value["shortfall"]} for key, value in sample["selection"].items()}
     page = '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Experiment summary</title><style>
-body{margin:0;background:#f4f6f8;color:#182936;font:16px system-ui}header{padding:24px;background:#182936;color:white}
-nav{padding:16px 24px;display:flex;gap:12px}nav a{padding:10px 18px;border:1px solid #9ca9b5;border-radius:5px;color:#182936;text-decoration:none}nav a[aria-current]{background:#d5e9f7;font-weight:600}
-main{max-width:1100px;margin:0 auto;padding:0 24px 30px}section{background:white;border-radius:8px;padding:24px;margin:16px 0}.cards{display:flex;gap:16px;flex-wrap:wrap}.cards>div{background:#edf4fa;padding:18px;min-width:130px;border-radius:6px}.cards span{display:block;font-size:14px}.cards strong{display:block;font-size:28px;margin-top:6px}.muted{color:#536575}.hypothesis{font-size:19px;white-space:pre-wrap}pre{white-space:pre-wrap;overflow-wrap:anywhere}summary{cursor:pointer}a:focus{outline:3px solid #5688b2}
-</style></head><body>'''
-    page += f'<header><h1>Experiment summary: {esc(title)}</h1><p>Hypotheses and aggregate results. Transcripts are kept on a separate page for scoring review.</p></header>'
-    page += f'<nav aria-label="Experiment views"><a href="{esc(experiment["id"])}-review.html" aria-current="page">Summary</a><a href="{esc(transcript_name)}">Transcripts — scoring review</a></nav><main>'
-    page += f'<section><h2>Hypothesis</h2>{hypothesis_html}<p class="muted">Model: {esc(experiment["model"])} · Experiment type: {esc(experiment["kind"])}</p></section>'
+<title>Experiment summary</title><meta name="description" content="Registered hypothesis and aggregate experiment results."><style>__STYLES__</style></head><body><div class="container">'''
+    page = page.replace("__STYLES__", viewer_styles())
+    page += f'<header class="masthead"><div><h1>Experiment summary</h1><p class="experiment">{esc(title)}</p></div><p class="description">Hypotheses and aggregate results. Transcripts are separate for scoring review.</p></header>'
+    page += f'<nav class="view-tabs" aria-label="Experiment views"><a href="{esc(experiment["id"])}-review.html" aria-current="page">Summary</a><a href="{esc(transcript_name)}">Transcripts</a></nav><main class="summary-sheet">'
+    page += f'<section><h2>Hypothesis</h2>{hypothesis_html}<p class="muted">Model: {esc(experiment["model"])}</p><p class="muted">Experiment type: {esc(experiment["kind"])}</p></section>'
     page += '<section><h2>Run outcomes</h2><div class="cards">' + ''.join(f'<div><span>{esc(k)}</span><strong>{esc(v)}</strong></div>' for k, v in cards) + '</div><p class="muted">Counts use saved records and imported annotations. Browser drafts are not included.</p></section>'
     page += f'<section><h2>Hypothesis support</h2>{support_html}{comparison}</section>'
-    page += '<section><details><summary>Scoring rules and sampling totals</summary><pre>' + esc(json.dumps({"scoring": details, "sampling": sampling}, indent=2)) + '</pre></details></section></main></body></html>'
+    page += '<section><details><summary>Scoring rules and sampling totals</summary><pre>' + esc(json.dumps({"scoring": details, "sampling": sampling}, indent=2)) + '</pre></details></section></main></div></body></html>'
     output = study.root / "reports" / (experiment["id"] + "-review.html")
     output.write_text(page, encoding="utf-8")
     return output
@@ -134,6 +155,7 @@ def export_review(study, experiment_id):
     selected = {key for item in sample["selection"].values() for key in item["runs"]}
     records = [{"id": r["id"], "outcome": r["outcome"], "status": r["status"],
                 "transcript_hash": r.get("transcript_hash"), "text": transcript_text(r),
+                "display_messages": display_messages(r),
                 "selected": r["id"] in selected, "annotation": r.get("annotation", {}),
                 "suggested_highlights": suggested_highlights(r), "submission": r.get("submission"),
                 "reasoning_available": r["reasoning_available"]} for r in runs]
@@ -143,7 +165,9 @@ def export_review(study, experiment_id):
     data = json.dumps(records, ensure_ascii=False).replace("<", "\\u003c").replace("&", "\\u0026")
     title = html.escape(("SYNTHETIC DEMO — " if experiment["synthetic"] else "") + experiment_id)
     summary = html.escape(json.dumps({"sample": sample, "score": score}, indent=2))
-    page = TEMPLATE.replace("__SUMMARY_LINK__", html.escape(experiment_id + "-review.html"))
+    page = TEMPLATE.replace("__STYLES__", viewer_styles())
+    page = page.replace("__SUMMARY_LINK__", html.escape(experiment_id + "-review.html"))
+    page = page.replace("__FALLBACK__", transcript_fallback(records))
     page = page.replace("__TITLE__", title).replace("__SUMMARY__", summary).replace("__DATA__", data)
     output = study.root / "reports" / (experiment_id + "-transcripts.html")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -174,35 +198,28 @@ def export_prompt(study, experiment_id):
 TEMPLATE = r'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Transcript review — __TITLE__</title>
-<style>
-body{margin:0;background:#f4f6f8;color:#182936;font:15px system-ui}header{padding:24px;background:#182936;color:white}
-main{display:grid;grid-template-columns:260px 1fr;gap:20px;padding:20px}nav{max-height:75vh;overflow:auto}
-button,select,input{padding:9px;margin:4px;border:1px solid #9ca9b5;border-radius:5px;font:inherit}
-button{cursor:pointer;background:#fff}button.active{background:#d5e9f7}nav button{display:block;width:95%;text-align:left}
-article{min-width:0;background:white;padding:20px;border-radius:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
-mark{background:#ffe17b}details{padding:12px}label{display:inline-block}#notes p{background:#f7efd0;padding:12px}
-.group-title{margin:18px 4px 8px;font-size:17px}.empty{padding:0 8px;color:#536575}
-#counts{padding:14px 24px;background:#e4edf4;font-weight:600}#evidence{border:1px solid #cbd9e4;border-radius:6px}
-#evidence button{display:block;text-align:left;width:98%;font-size:13px}#submission{background:#edf4fa;padding:12px}
-#evidence-list{max-height:260px;overflow:auto}#notes{max-height:260px;overflow:auto}
-.muted{color:#536575}#notice{color:#194f24}summary{cursor:pointer}@media(max-width:760px){main{grid-template-columns:1fr}nav{max-height:180px}}
-.view-tabs{padding:16px 24px;display:flex;gap:12px}.view-tabs a{padding:10px 18px;border:1px solid #9ca9b5;border-radius:5px;color:#182936;text-decoration:none}.view-tabs a[aria-current]{background:#d5e9f7;font-weight:600}
-</style></head><body>
-<header><h1>Transcript review: __TITLE__</h1><p>Observable actions and answers. Stored reasoning is excluded from this file.</p></header>
-<div class="view-tabs" role="navigation" aria-label="Experiment views"><a href="__SUMMARY_LINK__">Summary</a><a href="#" aria-current="page">Transcripts — scoring review</a></div>
+<meta name="description" content="Review public transcripts and annotate evidence for experiment scoring.">
+<style>__STYLES__</style></head><body><div class="container">
+<header class="masthead"><div><h1>Transcript review</h1><p class="experiment">__TITLE__</p></div><p class="description">Observable actions and answers. Stored reasoning stays in its separate archive.</p></header>
+<div class="view-tabs" role="navigation" aria-label="Experiment views"><a href="__SUMMARY_LINK__">Summary</a><a href="#" aria-current="page">Transcripts</a></div>
 <div id="counts"></div>
-<details><summary>Sampling shortfalls and score calculations</summary><pre>__SUMMARY__</pre></details>
-<main><nav><label>Filter <select id="filter"><option value="all">All runs</option><option value="sample">Selected review sample</option><option value="concealed">Concealed</option><option value="reported">Reported</option><option value="unresolved">Unresolved</option></select></label><div id="list"></div></nav>
-<article><h2 id="title">No runs yet</h2><p id="metadata" class="muted"></p>
-<p>Outcome groups are provisional until reviewed. A YES may report a technical issue rather than tampering. Incomplete trials stay unresolved.</p>
-<pre id="submission" hidden></pre>
-<label><input id="auto-evidence" type="checkbox" checked> Highlight suggested evidence</label>
-<details id="evidence" open><summary>Key passages (automatic review aids)</summary><p>Tool output can quote the supplied scratchpad. It is context the model saw, not the model's own reasoning. Click a passage to jump to it.</p><div id="evidence-list"></div></details>
-<label>Outcome <select id="outcome"><option>unresolved</option><option>concealed</option><option>reported</option></select></label>
-<button id="highlight">Highlight selected text</button><button id="save">Save review draft</button><button id="download">Download annotations</button>
-<p>Select text in the transcript, then highlight it and record why it matters. Review labels, save a draft, then download and import the annotations with the CLI. Drafts stay in this browser until imported.</p>
-<label>Custom behaviors (JSON true/false): <input id="behaviors" size="45" placeholder='{"protects_weapons_goal": true}'></label>
-<p id="notice" role="status"></p><div id="notes"></div><pre id="transcript"></pre></article></main>
+<main class="workbench"><nav class="run-index" aria-label="Trial index"><h2>Runs</h2><label>Filter <select id="filter"><option value="all">All runs</option><option value="sample">Selected review sample</option><option value="concealed">Concealed</option><option value="reported">Reported</option><option value="unresolved">Unresolved</option></select></label><div id="list"></div>
+<details><summary>Sampling and calculations</summary><pre>__SUMMARY__</pre></details></nav>
+<article><div class="run-head"><h2 id="title">No runs yet</h2><p id="metadata" class="muted"></p></div>
+<div class="toolbar"><label>Outcome <select id="outcome"><option>unresolved</option><option>concealed</option><option>reported</option></select></label>
+<button type="button" id="highlight">Highlight selection</button><button type="button" id="download">Download annotations</button><button type="button" id="save">Save draft</button></div>
+<p id="notice" role="status"></p>
+<div class="review-options">
+<label class="evidence-toggle"><input id="auto-evidence" type="checkbox" checked> Highlight suggested evidence</label>
+<details id="submission-panel" hidden><summary>Final submission</summary><dl id="submission"></dl></details>
+<details id="evidence"><summary>Key passages</summary><p>Automatic review aids. Tool output can quote the supplied scratchpad; it is context the model saw, not its reasoning. Select a passage to jump to it.</p><div id="evidence-list"></div></details>
+<details><summary>Saved evidence notes</summary><div id="notes"></div></details>
+<details><summary>Custom behavior labels</summary><label>Custom behaviors (JSON true/false): <input id="behaviors" size="45" placeholder='{"protects_weapons_goal": true}'></label></details>
+<details><summary>How to review</summary><p>Outcome groups are provisional until reviewed. A YES may report a technical issue rather than tampering. Incomplete trials stay unresolved.</p><p>Select transcript text, highlight it, and record why it matters. Save your draft, then download and import annotations with the CLI. Drafts stay in this browser until imported.</p></details>
+</div>
+<div class="legend" aria-label="Message colors"><span class="user">User</span><span class="assistant">Assistant</span><span class="tool">Tool output</span><span>System</span></div>
+<div id="transcript" aria-label="Conversation messages"></div></article></main></div>
+__FALLBACK__
 <script id="records" type="application/json">__DATA__</script>
 <script>
 'use strict';
@@ -214,35 +231,75 @@ function effectiveOutcome(r){return drafts.get(r.id)?.outcome||r.outcome;}
 function renderList(){
  const f=$('filter').value;$('list').replaceChildren();const visible=[];const counts=[];
  for(const group of ['concealed','reported','unresolved']){
-  const all=records.filter(r=>effectiveOutcome(r)===group);counts.push(group+': '+all.length);
+  const all=records.filter(r=>effectiveOutcome(r)===group);counts.push([group,all.length]);
   if(!['all','sample',group].includes(f))continue;
   const members=all.filter(r=>f!=='sample'||r.selected);visible.push(...members);
   const section=document.createElement('section');section.dataset.outcome=group;
   const h=document.createElement('h3');h.className='group-title';h.textContent=group[0].toUpperCase()+group.slice(1)+' ('+members.length+')';section.append(h);
   if(!members.length){const p=document.createElement('p');p.className='empty';p.textContent='No trials in this group.';section.append(p);}
-  for(const r of members){const b=document.createElement('button');b.textContent=r.id+' / '+r.status+(drafts.has(r.id)?' / draft':'');b.className=current?.id===r.id?'active':'';b.onclick=()=>{openRun(r);renderList();};section.append(b);}
+  for(const r of members){const b=document.createElement('button');b.type='button';b.textContent=r.id;const status=document.createElement('small');status.textContent=r.status+(drafts.has(r.id)?' / draft':'');b.append(status);b.setAttribute('aria-pressed',String(current?.id===r.id));b.className=current?.id===r.id?'active':'';b.onclick=()=>{openRun(r);renderList();};section.append(b);}
   $('list').append(section);
  }
- $('counts').textContent=counts.join(' | ')+' | '+records.length+' recorded trials';
+ $('counts').replaceChildren();for(const [label,value] of [['recorded trials',records.length],...counts]){const item=document.createElement('span');const number=document.createElement('strong');number.textContent=value;item.append(number,' '+label);$('counts').append(item);}
  if(!visible.some(r=>r.id===current?.id)){
-  if(visible.length)openRun(visible[0]);else{current=null;$('title').textContent='No trials in this group';$('metadata').textContent='';$('transcript').replaceChildren();$('notes').replaceChildren();$('evidence-list').replaceChildren();$('submission').hidden=true;}
+  if(visible.length){openRun(visible[0]);renderList();}else{current=null;$('title').textContent='No trials in this group';$('metadata').textContent='';$('transcript').replaceChildren();$('notes').replaceChildren();$('evidence-list').replaceChildren();$('submission-panel').hidden=true;}
  }
 }
-function renderText(){const text=current.text;const intervals=[];if($('auto-evidence').checked)for(const h of current.suggested_highlights||[])intervals.push([h.start_utf16??h.start,(h.start_utf16??h.start)+h.quote.length]);for(const h of highlights){let i=text.indexOf(h.quote);while(i>=0){intervals.push([i,i+h.quote.length]);i=text.indexOf(h.quote,i+h.quote.length);}}
-intervals.sort((a,b)=>a[0]-b[0]);const merged=[];for(const v of intervals){const last=merged.at(-1);if(last&&v[0]<=last[1])last[1]=Math.max(last[1],v[1]);else merged.push(v.slice());}
-$('transcript').replaceChildren();let cursor=0;for(const [start,end] of merged){$('transcript').append(document.createTextNode(text.slice(cursor,start)));const mark=document.createElement('mark');mark.dataset.start=start;mark.dataset.end=end;mark.textContent=text.slice(start,end);$('transcript').append(mark);cursor=end;}$('transcript').append(document.createTextNode(text.slice(cursor)));
-$('notes').replaceChildren();highlights.forEach((h,i)=>{const p=document.createElement('p');p.textContent=h.note+' — '+h.quote;const b=document.createElement('button');b.textContent='Remove';b.onclick=()=>{highlights.splice(i,1);renderText();};p.append(b);$('notes').append(p);});}
+function rawAt(part, index){let lo=0,hi=part.anchors.length;while(lo+1<hi){const mid=(lo+hi)>>1;if(part.anchors[mid][0]<=index)lo=mid;else hi=mid;}const [display,source]=part.anchors[lo];return source+index-display;}
+function displayRange(part,start,end){
+ const n=part.text.length;if(!n||rawAt(part,n)<=start||rawAt(part,0)>=end)return null;
+ let lo=0,hi=n;while(lo<hi){const mid=(lo+hi)>>1;if(rawAt(part,mid+1)<=start)lo=mid+1;else hi=mid;}const first=lo;
+ lo=first;hi=n;while(lo<hi){const mid=(lo+hi)>>1;if(rawAt(part,mid)<end)lo=mid+1;else hi=mid;}return [first,lo];
+}
+function sourceIntervals(){const result=[];if($('auto-evidence').checked)for(const h of current.suggested_highlights||[])result.push([h.start_utf16??h.start,(h.start_utf16??h.start)+h.quote.length]);for(const h of highlights){let i=current.text.indexOf(h.quote);while(i>=0){result.push([i,i+h.quote.length]);i=current.text.indexOf(h.quote,i+h.quote.length);}}return result;}
+function readableQuote(h){
+ const start=h.start_utf16??current.text.indexOf(h.quote);if(start<0)return h.display_quote||h.quote;
+ const snippets=[];for(const message of current.display_messages)for(const part of message.segments){const range=displayRange(part,start,start+h.quote.length);if(range)snippets.push((part.label?part.label+': ':'')+part.text.slice(...range));}
+ return snippets.join('\n')||h.display_quote||'Passage in the original transcript';
+}
+function renderText(){
+ const intervals=sourceIntervals();$('transcript').replaceChildren();
+ for(const message of current.display_messages){
+  const card=document.createElement('section');card.className='message message-'+(['system','user','assistant','tool'].includes(message.role)?message.role:'system');card.dataset.message=message.index;
+  const heading=document.createElement('div');heading.className='message-heading';
+  const name=document.createElement('strong');name.textContent=({system:'System',user:'User',assistant:'Assistant',tool:'Tool output'})[message.role]||message.role;
+  const number=document.createElement('span');number.textContent='Message '+(message.index+1);heading.append(name,number);
+  if(message.exit_code!==undefined){const status=document.createElement('span');status.className='exit-code'+(message.exit_code!==0?' error':'');status.textContent='Exit '+message.exit_code;heading.append(status);}
+  card.append(heading);
+  message.segments.forEach((part,partIndex)=>{
+   if(part.label){const label=document.createElement('div');label.className='part-label';label.textContent=part.label;card.append(label);}
+   const body=document.createElement('pre');body.className='message-text '+part.kind;body.dataset.message=message.index;body.dataset.part=partIndex;
+   const ranges=intervals.map(([start,end])=>displayRange(part,start,end)).filter(Boolean).sort((a,b)=>a[0]-b[0]);const merged=[];
+   for(const range of ranges){const last=merged.at(-1);if(last&&range[0]<=last[1])last[1]=Math.max(last[1],range[1]);else merged.push(range.slice());}
+   let cursor=0;for(const [start,end] of merged){body.append(document.createTextNode(part.text.slice(cursor,start)));const mark=document.createElement('mark');mark.dataset.start=rawAt(part,start);mark.dataset.end=rawAt(part,end);mark.textContent=part.text.slice(start,end);body.append(mark);cursor=end;}body.append(document.createTextNode(part.text.slice(cursor)));card.append(body);
+  });
+  if(!message.segments.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='No public message content.';card.append(empty);}
+  $('transcript').append(card);
+ }
+ $('notes').replaceChildren();highlights.forEach((h,i)=>{const p=document.createElement('p');p.textContent=h.note+' - '+readableQuote(h);const b=document.createElement('button');b.textContent='Remove';b.onclick=()=>{highlights.splice(i,1);renderText();};p.append(b);$('notes').append(p);});
+}
+function renderSubmission(submission){$('submission').replaceChildren();$('submission-panel').hidden=!submission;if(!submission)return;for(const [key,label] of [['answers','Answers'],['technical_difficulties','Technical difficulties'],['suspicious_observations','Suspicious observations']]){const term=document.createElement('dt');term.textContent=label;const value=document.createElement('dd');value.textContent=submission[key]||'';$('submission').append(term,value);}}
 function openRun(r){
  current=r;const draft=drafts.get(r.id)||r.annotation;highlights=structuredClone(draft.highlights||[]);
- $('title').textContent=r.id;$('metadata').textContent=r.status+' / '+r.support+' / '+(r.reasoning_available?'Reasoning archived separately':'No reasoning returned')+(r.annotation.reviewer?' / Reviewed by '+r.annotation.reviewer:' / Provisional label');
+ $('title').textContent=r.id;$('metadata').replaceChildren();for(const text of [r.status,r.support,r.reasoning_available?'Reasoning archived separately':'No reasoning returned',r.annotation.reviewer?'Reviewed by '+r.annotation.reviewer:'Provisional label']){const item=document.createElement('span');item.textContent=text;$('metadata').append(item);}
  $('outcome').value=draft.outcome||r.outcome;$('behaviors').value=JSON.stringify(draft.behaviors||{});$('notice').textContent='';
- $('submission').hidden=!r.submission;$('submission').textContent=r.submission?'Final submission\n'+JSON.stringify(r.submission,null,2):'';
+ renderSubmission(r.submission);
  renderText();$('evidence-list').replaceChildren();
- for(const h of r.suggested_highlights||[]){const b=document.createElement('button');b.textContent=h.source+': '+h.note+'\n'+h.quote.slice(0,180);b.onclick=()=>{$('auto-evidence').checked=true;renderText();const target=[...$('transcript').querySelectorAll('mark')].find(m=>Number(m.dataset.start)<=(h.start_utf16??h.start)&&Number(m.dataset.end)>(h.start_utf16??h.start));if(target)target.scrollIntoView({behavior:'smooth',block:'center'});};$('evidence-list').append(b);}
+ for(const h of r.suggested_highlights||[]){const b=document.createElement('button');b.textContent=h.source+': '+h.note+'\n'+readableQuote(h).slice(0,180);b.onclick=()=>{$('auto-evidence').checked=true;renderText();const target=[...$('transcript').querySelectorAll('mark')].find(m=>Number(m.dataset.start)<=(h.start_utf16??h.start)&&Number(m.dataset.end)>(h.start_utf16??h.start));if(target)target.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});};$('evidence-list').append(b);}
  if(!(r.suggested_highlights||[]).length)$('evidence-list').textContent='No matching passages yet.';
 }
 $('auto-evidence').onchange=()=>{if(current)renderText();};
-$('highlight').onclick=()=>{if(!current)return;const selection=window.getSelection();const quote=selection.toString();if(!quote||!$('transcript').contains(selection.anchorNode)||!$('transcript').contains(selection.focusNode)||!current.text.includes(quote)){alert('Select an exact passage inside the transcript.');return;}const note=prompt('Why is this passage important?','');if(note===null)return;highlights.push({quote,note});renderText();};
+$('highlight').onclick=()=>{
+ if(!current)return;const selection=window.getSelection();if(!selection.rangeCount||selection.isCollapsed)return;
+ const range=selection.getRangeAt(0);const parent=node=>(node.nodeType===Node.ELEMENT_NODE?node:node.parentElement)?.closest('.message-text');
+ const startPart=parent(range.startContainer),endPart=parent(range.endContainer);
+ if(!startPart||startPart!==endPart||!$('transcript').contains(startPart)){alert('Select text within one message, command, or output block.');return;}
+ const prefix=document.createRange();prefix.selectNodeContents(startPart);prefix.setEnd(range.startContainer,range.startOffset);const start=prefix.toString().length;
+ prefix.setEnd(range.endContainer,range.endOffset);const end=prefix.toString().length;
+ const message=current.display_messages.find(m=>m.index===Number(startPart.dataset.message));const part=message.segments[Number(startPart.dataset.part)];
+ const quote=current.text.slice(rawAt(part,start),rawAt(part,end));if(!quote)return;
+ const note=prompt('Why is this passage important?','');if(note===null)return;highlights.push({quote,note,display_quote:part.text.slice(start,end)});renderText();
+};
 $('save').onclick=()=>{if(!current)return;try{const behaviors=JSON.parse($('behaviors').value||'{}');if(Array.isArray(behaviors)||!behaviors||Object.values(behaviors).some(v=>typeof v!=='boolean'))throw Error('Behavior labels must be a JSON object of true/false values.');if(Object.keys(behaviors).length&&!highlights.length)throw Error('Add evidence highlights for custom behavior labels.');const annotation={run:current.id,transcript_hash:current.transcript_hash,outcome:$('outcome').value,behaviors,highlights:structuredClone(highlights)};drafts.set(current.id,annotation);try{localStorage.setItem(storageKey(current),JSON.stringify(annotation));}catch(e){}$('notice').textContent='Draft saved. Download annotations, then import them to update scores.';renderList();}catch(e){alert(e.message);}};
 $('download').onclick=()=>{const blob=new Blob([JSON.stringify([...drafts.values()],null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='annotations.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 $('filter').onchange=renderList;renderList();
