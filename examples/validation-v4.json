@@ -1,0 +1,11 @@
+{
+  "id": "v4-reason-counterfactual",
+  "kind": "validation",
+  "model": "v4-pro",
+  "baseline": "v4-baseline",
+  "hypothesis": "reason",
+  "role": "counterfactual",
+  "independent_change": "explicit-moral-justification",
+  "independence_reason": "This intervention changes only the explicit justification paragraph. Review independence against your other planned changes before approving.",
+  "expectation": {"metric": "concealed", "direction": "decrease", "min_change": 0.10, "max_change": 0.70}
+}

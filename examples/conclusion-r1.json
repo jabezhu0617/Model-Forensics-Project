@@ -1,0 +1,16 @@
+{
+  "id": "r1-final-conclusion",
+  "text": "Replace this with your conclusion after validation.",
+  "reviewer": "Replace with your name",
+  "hypothesis": "reason",
+  "baseline": "r1-baseline",
+  "validation_experiments": ["YOUR-validation-1", "YOUR-validation-2", "YOUR-validation-3"],
+  "paper_matches": [
+    {"claim": "source", "prediction_matches": false, "counterfactual_matches": false, "evidence": "Replace with your comparison evidence."},
+    {"claim": "reason", "prediction_matches": false, "counterfactual_matches": false, "evidence": "Replace with your comparison evidence."},
+    {"claim": "appeal", "prediction_matches": false, "counterfactual_matches": false, "evidence": "Replace with your comparison evidence."},
+    {"claim": "autonomy", "prediction_matches": false, "counterfactual_matches": false, "evidence": "Replace with your comparison evidence."},
+    {"claim": "generalization", "prediction_matches": false, "counterfactual_matches": false, "evidence": "Replace with your comparison evidence."},
+    {"claim": "reasoning_intervention", "prediction_matches": false, "counterfactual_matches": false, "evidence": "Replace with your comparison evidence."}
+  ]
+}

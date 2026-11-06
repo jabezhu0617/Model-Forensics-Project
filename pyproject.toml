@@ -1,0 +1,19 @@
+[project]
+name = "behavior-model-forensics"
+version = "0.1.0"
+description = "Behavior-first hypothesis generation and validation for evaluation tampering"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+model-forensics = "forensics.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["forensics"]
+
+[tool.setuptools.package-data]
+forensics = ["assets/*"]

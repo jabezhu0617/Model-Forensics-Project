@@ -1,1 +1,15 @@
 .tools/
+__pycache__/
+*.py[cod]
+.venv/
+studies/
+.env
+.env.*
+!.env.example
+/HANDOFF.md
+.codex/
+.agents/
+.aws/
+build/
+dist/
+*.egg-info/

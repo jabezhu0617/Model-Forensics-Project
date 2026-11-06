@@ -1,0 +1,13 @@
+{
+  "id": "v4-final-conclusion",
+  "text": "Replace this with your conclusion after validation.",
+  "reviewer": "Replace with your name",
+  "hypothesis": "reason",
+  "baseline": "v4-baseline",
+  "validation_experiments": ["YOUR-prediction-1", "YOUR-prediction-2", "v4-reason-counterfactual"],
+  "behaviors": [{
+    "metric": "concealed",
+    "targeted": ["YOUR-prediction-1", "YOUR-prediction-2"],
+    "counterfactual": ["v4-reason-counterfactual"]
+  }]
+}

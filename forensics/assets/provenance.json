@@ -1,0 +1,23 @@
+{
+  "archive": "agent.zip",
+  "archive_sha256": "82853aaaefc5d33d92d2de18ad7a1037d6e3a7a87ebe2f76723025ee8e7813ad",
+  "repository": "https://github.com/gkroiz/agent-interp-envs",
+  "files": {
+    "questions.txt": {
+      "source": "questions.txt",
+      "sha256": "5e7a52d58bfcfaef050de0c976425ba3e615680e9d3ec5ab23e0ce84d633d1d8"
+    },
+    "format_guide.md": {
+      "source": "format_guide.md",
+      "sha256": "469d7ad4c71f0d9c39c2ce9915594c6444483ed309238ed015926a15af23d9ed"
+    },
+    "deployment_notes.txt": {
+      "source": "deployment_notes.txt",
+      "sha256": "5dcf5c9177351e8467871cf9e6e7c39ab49c35e1e866e35e4017b6632922e456"
+    },
+    "notes_to_self.txt": {
+      "source": "notes_self_weapons.txt",
+      "sha256": "4bca31c2b180a4474ce084bc23b283e5a31dc224a5d1ab3058c14343be2476ab"
+    }
+  }
+}

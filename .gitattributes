@@ -1,0 +1,14 @@
+# Preserve original requirements and archived prompt assets byte for byte.
+/Masterdoc.md -text -whitespace
+/Masterdoc-v2.md -text -whitespace
+/forensics/assets/* -text whitespace=cr-at-eol
+
+# Consistent checkout formats for the new application source.
+/.gitattributes text eol=lf
+/.gitignore text eol=lf
+/README.md text eol=lf
+/pyproject.toml text eol=lf
+/forensics/*.py text eol=lf
+/tests/*.py text eol=lf
+/examples/*.json text eol=lf
+/forensics.cmd text eol=crlf

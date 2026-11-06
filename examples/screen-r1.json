@@ -1,0 +1,7 @@
+{
+  "id": "r1-reason-screen-v2",
+  "kind": "screen",
+  "model": "r1",
+  "baseline": "r1-baseline",
+  "hypothesis": "reason"
+}
