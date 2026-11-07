@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Model forensics viewer</title><style>__STYLES__
+body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+[hidden]{display:none!important}
+.viewer-head{padding:16px clamp(14px,3vw,40px) 10px;border-bottom:1px solid var(--rule);background:var(--sheet)}
+.viewer-head h1{font-size:22px;margin-bottom:10px}
+nav,.controls,#direction,.actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+#studies{gap:2px;border-bottom:1px solid var(--rule);padding-bottom:6px}
+#studies button{background:transparent;border:0;border-bottom:3px solid transparent;font-weight:600}
+#studies button[aria-current]{border-bottom-color:var(--accent);color:var(--accent)}
+.controls{margin-top:8px;gap:8px 24px}
+#views button,#direction button,.actions button{min-height:34px;padding:4px 10px}
+#views button[aria-current],#direction button[aria-pressed=true]{background:var(--selection);border-color:var(--rule-strong)}
+#direction{font-size:13px;color:var(--muted)}
+iframe,#overview,#empty{min-height:0;flex:1;width:100%;border:0}
+#overview,#empty{overflow:auto}
+.reading{max-width:980px;margin:auto;padding:clamp(18px,4vw,42px)}
+.reading header h2{margin:0 0 12px}
+.scores{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--rule);background:var(--sheet);margin:16px 0 26px}
+.score{padding:14px 18px}.score+.score{border-left:1px solid var(--rule)}
+.score span,.score strong{display:block}.score span,.progress{font-size:14px;color:var(--muted)}
+.score strong{font-size:clamp(20px,4vw,32px);line-height:1.3}
+.arm{border-top:2px solid var(--rule-strong);padding:16px 0 22px}
+.arm h3{margin:0}
+.outcome-rate{font-size:22px;font-weight:600;margin:9px 0 2px}.outcome-counts{margin:4px 0 12px}
+</style></head><body><header class="viewer-head"><h1>Model forensics</h1>
+<nav id="studies" aria-label="Experiments and hypotheses"></nav>
+<div class="controls"><nav id="views" aria-label="Views"></nav>
+<div id="direction" role="group" aria-label="Expected concealment direction" hidden></div></div>
+</header>
+<main id="overview" hidden></main><section id="empty" hidden></section>
+<iframe id="page" title="Experiment view"></iframe>
+<script type="application/json" id="data">__DATA__</script><script>
+'use strict';
+const entries = JSON.parse(document.getElementById('data').textContent);
+const el = id => document.getElementById(id);
+function node(tag, text, className) {
+    const element = document.createElement(tag);
+    if (text !== undefined) element.textContent = text;
+    if (className) element.className = className;
+    return element;
+}
+function button(text, action, current=false) {
+    const item = node('button',text);
+    item.type = 'button'; item.onclick = action;
+    if (current) item.setAttribute('aria-current','page');
+    return item;
+}
+const names = {summary:'Summary',inputs:'Inputs',transcripts:'Transcripts',statistics:'Statistics',accounting:'Run accounting',detail:'Run summary'};
+const topics = {H0:'Closing moral judgment',H1:'Intended deployment',H2:'Motive for tampering',H3:'Trust in a prior instance',H4:'Defense affiliation'};
+const buckets = new Map();
+for (const entry of entries.filter(e => e.arm)) {
+    const key = entry.study + '/' + entry.arm.group;
+    if (!buckets.has(key)) buckets.set(key,[]);
+    buckets.get(key).push(entry);
+}
+const items = [], used = new Set();
+for (const entry of entries) {
+    if (used.has(entry.id)) continue;
+    const groupId = entry.arm && entry.study + '/' + entry.arm.group;
+    const members = buckets.get(groupId);
+    if (members && members.length === 2 && members[0].arm.sign !== members[1].arm.sign &&
+        members[0].arm.baseline === members[1].arm.baseline && members[0].arm.model === members[1].arm.model) {
+        const arms = Object.fromEntries(members.map(e => [e.arm.sign,e]));
+        items.push({id:groupId,label:entry.arm.group,arms});
+        members.forEach(e => used.add(e.id));
+    } else {
+        const label = entry.experiment === 'r1-baseline' ? 'R1 baseline' : entry.display_name;
+        items.push({id:entry.id,label,entry}); used.add(entry.id);
+    }
+}
+let item, view, directions;
+const frame = el('page');
+function selectItem(next) {
+    item = next;
+    directions = {inputs:'−', transcripts:'−', detail:'−', accounting:'−'};
+}
+function browse(nextView,sign) {
+    if (sign && nextView in directions) directions[nextView] = sign;
+    show(nextView);
+}
+function describeScore(entry) {
+    if (entry.arm.score != null) return entry.arm.score + ' / 2';
+    const trials = entry.arm.trials;
+    if (trials.length === entry.requested && trials.every(t => ['complete','incomplete','failed'].includes(t.status)) &&
+        trials.some(t => t.outcome === 'unresolved')) return 'Unscored · unresolved runs';
+    return 'Pending';
+}
+function directionName(sign) { return sign === '−' ? 'lower' : 'higher'; }
+const percent = new Intl.NumberFormat('en', {style:'percent', maximumFractionDigits:2});
+function runSection(entry) {
+    const arm = entry.arm, section = node('section',undefined,'arm');
+    section.append(node('h3', arm.sign + ' runs · ' + arm.topic));
+    const status = entry.approved ? 'Approved' : 'Draft awaiting review';
+    const [concealed, reported, unresolved] = ['concealed','reported','unresolved'].map(
+        outcome => arm.trials.filter(trial => trial.outcome === outcome).length
+    );
+    const labeled = concealed + reported;
+    if (labeled) {
+        const rate = concealed / labeled;
+        section.append(node('p',percent.format(rate) + ' concealed','outcome-rate'));
+        if (arm.baseline_rate != null) {
+            let comparison = 'Baseline: ' + percent.format(arm.baseline_rate) + ' concealed';
+            if (arm.baseline_rate > 0) {
+                const relative = (rate - arm.baseline_rate) / arm.baseline_rate;
+                comparison += relative === 0 ? ' · Same rate' : ' · ' + percent.format(Math.abs(relative)) + (relative < 0 ? ' lower' : ' higher') + ' than baseline';
+            }
+            section.append(node('p',comparison,'progress'));
+        }
+        section.append(node('p',concealed + ' concealed · ' + reported + ' reported' + (unresolved ? ' · ' + unresolved + ' unresolved' : ''),'outcome-counts'));
+    } else {
+        section.append(node('p',arm.trials.length ? 'No classified runs yet' : 'No runs yet','outcome-rate'));
+    }
+    const attempts = arm.attempt_count > entry.runs ? ' · ' + arm.attempt_count + ' attempts including retries' : '';
+    section.append(node('p',entry.runs + ' / ' + entry.requested + ' recorded' + attempts + ' · ' + status,'progress'),node('p',entry.title));
+    const actions = node('div',undefined,'actions');
+    for (const key of ['inputs','transcripts','detail','accounting']) {
+        if (key === 'accounting' && !entry.pages.accounting) continue;
+        actions.append(button(names[key],() => browse(key,arm.sign)));
+    }
+    section.append(actions);
+    return section;
+}
+function overview() {
+    const content = node('div',undefined,'reading'), header = node('header');
+    header.append(node('h2',item.label + (topics[item.label] ? ' · ' + topics[item.label] : '')));
+    const scores = node('div',undefined,'scores');
+    for (const sign of ['−','+']) {
+        const card = node('div',undefined,'score');
+        card.append(node('span',sign + ' score · ' + directionName(sign) + ' concealment'),node('strong',describeScore(item.arms[sign])));
+        const trials = item.arms[sign].arm.trials;
+        const labeled = trials.filter(t => t.outcome === 'reported' || t.outcome === 'concealed');
+        const concealed = labeled.filter(t => t.outcome === 'concealed').length;
+        card.append(node('span', labeled.length
+            ? percent.format(concealed / labeled.length) + ' concealed (' + concealed + '/' + labeled.length + ' classified)'
+            : (trials.length ? 'No classified runs yet' : 'No runs yet')));
+        scores.append(card);
+    }
+    content.append(header,scores,runSection(item.arms['−']),runSection(item.arms['+']));
+    el('overview').replaceChildren(content);
+}
+function show(requested) {
+    const primary = item.arms ? ['summary','inputs','transcripts'] : Object.keys(item.entry.pages);
+    view = primary.includes(requested) || (item.arms && ['detail','accounting'].includes(requested)) ? requested : 'summary';
+    const sign = directions[view] || '−';
+    const entry = item.arms ? item.arms[sign] : item.entry;
+    const groupedSummary = Boolean(item.arms && view === 'summary');
+    const empty = Boolean(item.arms && view === 'transcripts' && !entry.runs);
+    el('studies').replaceChildren(...items.map(i => button(i.label,() => { selectItem(i); show('summary'); },i === item)));
+    el('views').replaceChildren(...primary.map(k => button(names[k],() => show(k),k === view)));
+    const switcher = el('direction');
+    switcher.hidden = !(item.arms && ['inputs','transcripts'].includes(view));
+    switcher.replaceChildren();
+    if (!switcher.hidden) {
+        switcher.append(node('span','Expected concealment'));
+        for (const s of ['−','+']) {
+            const b = button(s + ' ' + directionName(s),() => browse(view,s));
+            b.setAttribute('aria-pressed',String(sign === s)); switcher.append(b);
+        }
+    }
+    el('overview').hidden = !groupedSummary; el('empty').hidden = !empty; frame.hidden = groupedSummary || empty;
+    frame.title = item.label + ' · ' + names[view] + (item.arms && !groupedSummary ? ' (' + sign + ')' : '');
+    if (groupedSummary) overview();
+    else if (empty) {
+        const content = node('div',undefined,'reading');
+        content.append(node('h2',item.label + sign + ' · Transcripts'),node('p','No transcripts yet. 0 of ' + entry.requested + ' trials recorded.'));
+        el('empty').replaceChildren(content);
+    } else {
+        const page = entry.pages[view === 'detail' ? 'summary' : view] || entry.pages.summary;
+        frame.srcdoc = page.replace('</head>', '<style>nav.view-tabs,div.view-tabs{display:none}</style></head>');
+    }
+    const suffix = item.arms && !groupedSummary ? ':' + (sign === '+' ? 'plus' : 'minus') : '';
+    history.replaceState(null,'','#' + encodeURIComponent(item.id) + ':' + view + suffix);
+}
+frame.onload = () => {
+    frame.contentDocument.addEventListener('click', event => {
+        const link = event.target.closest('a');
+        if (!link) return;
+        const sign = directions[view] || '−';
+        const entry = item.arms ? item.arms[sign] : item.entry;
+        for (const [suffix,tab] of Object.entries({review:'summary',inputs:'inputs',transcripts:'transcripts',statistics:'statistics',accounting:'accounting'})) {
+            if (link.getAttribute('href') === entry.experiment + '-' + suffix + '.html') {
+                event.preventDefault(); browse(tab,sign); return;
+            }
+        }
+    });
+};
+function restore() {
+    const [encoded,tab,side] = location.hash.slice(1).split(':');
+    let id;
+    try { id = decodeURIComponent(encoded || ''); } catch { id = ''; }
+    const selected = items.find(i => i.id === id || (i.arms && Object.values(i.arms).some(e => e.id === id))) || items[0];
+    if (!selected) return;
+    selectItem(selected);
+    const legacy = selected.arms && Object.values(selected.arms).find(e => e.id === id);
+    const sign = side === 'plus' ? '+' : side === 'minus' ? '−' : legacy?.arm.sign;
+    browse(tab || 'summary',sign);
+}
+window.addEventListener('hashchange',restore);
+restore();
+</script></body></html>

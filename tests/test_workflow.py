@@ -115,15 +115,15 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("No hypothesis is being tested", summary)
         self.assertNotIn('id="records"', summary)
 
-    def test_summary_shows_registered_hypothesis_and_support(self):
+    def test_summary_shows_hypothesis_rate_and_score_without_support_section(self):
         self.run_fixture(self.base, 6)
         experiment = self.plan()
         self.run_fixture(experiment, 1)
         summary = Path(export_review(self.study, experiment["id"])["review"]).read_text(encoding="utf-8")
         self.assertIn(self.study.get("hypotheses", "A")["text"], summary)
-        self.assertIn("Supported runs</span><strong>9", summary)
-        self.assertIn("Unsupported runs</span><strong>1", summary)
-        self.assertIn("Hypothesis score: <strong>2 / 2", summary)
+        self.assertNotIn("<h2>Hypothesis support</h2>", summary)
+        self.assertIn("This experiment</span><strong>10.00%", summary)
+        self.assertIn("Screen score</span><strong>2 / 2", summary)
         self.assertNotIn("The note describes tampering with the questions.", summary)
 
     def test_think_tags_and_unknown_fields_do_not_leak(self):

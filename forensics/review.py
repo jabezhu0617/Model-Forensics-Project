@@ -123,12 +123,9 @@ def export_summary(study, experiment, runs, score, sample, transcript_name):
     cards = [("Recorded / planned", f"{len(runs)} / {experiment['count']}"),
              ("Concealed", counts["concealed"]), ("Reported", counts["reported"]),
              ("Unresolved", counts["unresolved"])]
-    support = [("Supported runs", score.get("supported_runs", "Not scored")),
-               ("Unsupported runs", score.get("unsupported_runs", "Not scored"))]
-    if "run_labels" in score:
-        support.append(("Unresolved support", sum(item["label"] == "unresolved" for item in score["run_labels"])))
-    percent = lambda value: "Not available" if value is None else f"{value * 100:.1f}%"
-    score_value = score.get("score")
+    if experiment["kind"] == "screen":
+        value = score.get("score")
+        cards.append(("Screen score", f"{value} / 2" if value is not None else "Pending"))
     if hypothesis:
         hypothesis_html = f'<p class="muted">{esc(hypothesis_id)}</p><p class="hypothesis">{esc(hypothesis["text"])}</p>'
         expectation = experiment.get("expectation", hypothesis.get("expectation", {}))
@@ -138,31 +135,22 @@ def export_summary(study, experiment, runs, score, sample, transcript_name):
             hypothesis_html += f'<p>Expected change magnitude: {expectation.get("min_change", 0) * 100:g}–{expectation.get("max_change", 1) * 100:g} {unit}.</p>'
     else:
         hypothesis_html = '<p>No hypothesis is being tested in this experiment. This is a baseline or setup run set.</p>'
-    if not hypothesis:
-        support_html = '<p>Hypothesis support is not applicable to this experiment. Concealed/reported outcomes are not support labels.</p>'
-    else:
-        support_html = '<div class="cards">' + ''.join(f'<div><span>{esc(k)}</span><strong>{esc(v)}</strong></div>' for k, v in support) + '</div>'
-        support_html += '<p>Support percentage: <strong>' + (f'{score["support_percent"]:.1f}%' if score.get("support_percent") is not None else 'Not available') + '</strong></p>'
-        if experiment["kind"] == "screen":
-            support_html += f'<p>Hypothesis score: <strong>{esc(score_value) + " / 2" if score_value is not None else "Pending"}</strong></p>'
-        support_html += '<p class="muted">Individual support labels compare outcomes with the baseline. The hypothesis score uses the registered screening rule.</p>'
     comparison = ''
     if "baseline" in score and "test" in score:
-        delta = score.get("delta_percentage_points")
         metric = esc(experiment.get('expectation', {}).get('metric', 'concealed').replace('_', ' ').capitalize())
         baseline_rate = score['baseline']['rate']
         trial_rate = score['test']['rate']
         baseline_label = f'{baseline_rate * 100:.2f}%' if baseline_rate is not None else 'Pending'
         trial_label = f'{trial_rate * 100:.2f}%' if trial_rate is not None else 'Pending'
-        delta_label = f'{delta:+.2f}' if delta is not None else 'Pending'
+        relative = ((trial_rate - baseline_rate) / baseline_rate
+                    if baseline_rate and trial_rate is not None else None)
+        change_label = f'{relative:+.2%}' if relative is not None else '—'
         comparison = (
             f'<section><h2>{metric} rate compared with baseline</h2>'
             '<div class="cards rate-comparison">'
-            f'<div><span>Baseline rate</span><strong>{baseline_label}</strong></div>'
             f'<div><span>This experiment</span><strong>{trial_label}</strong></div>'
-            f'<div><span>Change from baseline</span><strong>{delta_label}</strong>'
-            '<span>percentage points</span></div></div>'
-            '<p class="muted">Change = experiment rate − baseline rate. Positive values indicate an increase and negative values indicate a decrease.</p></section>')
+            f'<div><span>Baseline rate</span><strong>{baseline_label}</strong></div>'
+            f'<div><span>Relative change from baseline</span><strong>{change_label}</strong></div></div></section>')
     # Explicit allowlist prevents run-level evidence from entering this document.
     details = {key: score[key] for key in ("status", "complete", "scoring_rule", "expected", "change_unit", "range_supported", "directional_change") if key in score}
     sampling = {key: {"available": value["available"], "selected": len(value["runs"]), "shortfall": value["shortfall"]} for key, value in sample["selection"].items()}
@@ -174,7 +162,6 @@ def export_summary(study, experiment, runs, score, sample, transcript_name):
     page += f'<section><h2>Hypothesis</h2>{hypothesis_html}<p class="muted">Model: {esc(experiment["model"])}</p><p class="muted">Experiment type: {esc(experiment["kind"])}</p></section>'
     page += comparison
     page += '<section><h2>Run outcomes</h2><div class="cards">' + ''.join(f'<div><span>{esc(k)}</span><strong>{esc(v)}</strong></div>' for k, v in cards) + '</div><p class="muted">Counts use saved records and imported annotations. Browser drafts are not included.</p></section>'
-    page += f'<section><h2>Hypothesis support</h2>{support_html}</section>'
     page += '<section><details><summary>Scoring rules and sampling totals</summary><pre>' + esc(json.dumps({"scoring": details, "sampling": sampling}, indent=2)) + '</pre></details></section></main></div></body></html>'
     output = study.root / "reports" / (experiment["id"] + "-review.html")
     output.write_text(page, encoding="utf-8")

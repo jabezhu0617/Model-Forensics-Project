@@ -2,11 +2,56 @@
 import html
 import json
 import re
+from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 
 from .review import export_review, export_inputs, transcript_fallback, viewer_styles
 from .transcript_display import display_messages
-from .storage import Study
+from .storage import Study, read
+
+
+def experiment_label(experiment):
+    key = experiment['id']
+    if key == 'laptop-test':
+        return 'Laptop Test'
+    if experiment.get('kind') != 'screen':
+        return key
+    name = key
+    if key == 'r1-reason-screen-v2':
+        name = 'H0 — Reason screen'
+    else:
+        match = re.fullmatch(r'r1-(h\d+)-(.+)', key)
+        if match:
+            topic = match[2].replace('-', ' ').capitalize()
+            topic = re.sub(r'\bus\b', 'U.S.', topic, flags=re.I)
+            topic = re.sub(r'\bchina\b', 'China', topic, flags=re.I)
+            name = match[1].upper() + ' — ' + topic
+    prediction = experiment.get('expectation', {})
+    sign = {'increase': '+', 'decrease': '−'}.get(prediction.get('direction'))
+    if sign and prediction.get('metric', 'concealed') == 'concealed':
+        prefix, separator, topic = name.partition(' — ')
+        name = prefix + sign + separator + topic
+    return name
+
+
+def hypothesis_arm(source, experiment):
+    if experiment.get('kind') != 'screen':
+        return None
+    name, separator, topic = experiment_label(experiment).partition(' — ')
+    if not separator or not re.fullmatch(r'H\d+[−+]', name):
+        return None
+    score_path = source.root / 'reports' / (experiment['id'] + '-score.json')
+    score = read(score_path) if experiment.get('approval') and score_path.exists() else {}
+    trials = []
+    for record in source.runs(experiment['id']):
+        run = source.public_run(record)
+        outcome = run['outcome'] if run['status'] == 'complete' else 'unresolved'
+        trials.append({'id': run['id'], 'status': run['status'], 'outcome': outcome})
+    return {'group': name[:-1], 'sign': name[-1], 'topic': topic,
+            'baseline': experiment['baseline'], 'model': experiment['model'],
+            'score': score.get('score'), 'baseline_rate': score.get('baseline', {}).get('rate'),
+            'attempt_count': score.get('total_attempts_including_retries'),
+            'trials': trials}
 
 
 def export_collection(study):
@@ -51,23 +96,23 @@ def export_collection(study):
                 if path.exists():
                     pages[tab] = path.read_text(encoding='utf-8')
             hypothesis = source.get('hypotheses', experiment['hypothesis']) if experiment.get('hypothesis') else None
-            display_name = 'H0 — Reason screen' if experiment_id == 'r1-reason-screen-v2' else experiment_id
+            display_name = experiment_label(experiment)
             if experiment_id == 'r1-reason-screen-v2':
                 for tab in pages:
                     pages[tab] = pages[tab].replace('>' + experiment_id + '<', '>' + display_name + '<')
             entries.append({'id': source.root.name + '/' + experiment_id,
                             'experiment': experiment_id, 'study': source.root.name,
                             'display_name': display_name,
+                            'arm': hypothesis_arm(source, experiment),
                             'title': hypothesis['text'] if hypothesis else experiment_id,
                             'runs': result['runs'], 'requested': experiment['count'],
                             'approved': bool(experiment.get('approval')),
                             'synthetic': experiment['synthetic'], 'pages': pages})
     entries.sort(key=lambda entry: (entry['study'] != study.root.name,
                                     entry['experiment'] != 'r1-baseline',
-                                    '-h' not in entry['experiment'] and entry['experiment'] != 'r1-reason-screen-v2',
+                                    entry['display_name'].split(' — ')[0].rstrip('−+'), '+' in entry['display_name'].split(' — ')[0],
                                     entry['display_name']))
-    payload = json.dumps(entries, ensure_ascii=False).replace('&', '\\u0026').replace('<', '\\u003c')
-    page = TEMPLATE.replace('__STYLES__', viewer_styles()).replace('__DATA__', payload)
+    page = render_viewer(entries)
     output = study.root / 'reports' / 'viewer.html'
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(page, encoding='utf-8')
@@ -84,63 +129,7 @@ def export_collection(study):
             'recorded_slots': sum(entry['runs'] for entry in entries)}
 
 
-TEMPLATE = '''<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Model forensics viewer</title><style>__STYLES__
-body{height:100vh;display:flex;flex-direction:column}.viewer-head{padding:16px 24px;border-bottom:1px solid var(--rule)}
-.viewer-head h1{font-size:22px;margin-bottom:12px}.viewer-head select{width:100%;max-width:100%}
-#tabs{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}#tabs button[aria-current]{background:var(--selection)}
-#status{font-size:14px;margin:8px 0 0}iframe{flex:1;width:100%;border:0;min-height:400px}
-</style></head><body><header class="viewer-head"><h1>Model forensics</h1>
-<label for="experiment">Experiment</label><select id="experiment"></select><p id="status"></p>
-<nav id="tabs" aria-label="Experiment views"></nav></header><iframe id="page" title="Experiment view"></iframe>
-<script type="application/json" id="data">__DATA__</script><script>
-const experiments = JSON.parse(document.getElementById('data').textContent);
-const selector = document.getElementById('experiment');
-const frame = document.getElementById('page');
-const labels = {summary:'Summary', inputs:'Inputs', transcripts:'Transcripts', statistics:'Statistics', accounting:'Run accounting'};
-let selected = experiments[0];
-let activeTab = 'summary';
-for (const entry of experiments) {
-    const option = document.createElement('option');
-    option.value = entry.id;
-    option.textContent = entry.study + ' / ' + entry.display_name + ' (' + entry.runs + '/' + entry.requested + ' runs)' + (entry.synthetic ? ' — synthetic' : '');
-    selector.append(option);
-}
-function show(tab) {
-    if (!selected) return;
-    activeTab = selected.pages[tab] ? tab : 'summary';
-    selector.value = selected.id;
-    document.getElementById('status').textContent = selected.title + ' · ' + selected.runs + ' recorded / ' + selected.requested + ' planned' + (selected.approved ? ' · Approved' : ' · Draft awaiting review');
-    const tabs = document.getElementById('tabs');
-    tabs.replaceChildren();
-    for (const key of Object.keys(selected.pages)) {
-        const button = document.createElement('button');
-        button.textContent = labels[key];
-        if (key === activeTab) button.setAttribute('aria-current', 'page');
-        button.onclick = () => show(key);
-        tabs.append(button);
-    }
-    frame.srcdoc = selected.pages[activeTab].replace('</head>', '<style>nav.view-tabs,div.view-tabs{display:none}</style></head>');
-    history.replaceState(null, '', '#' + encodeURIComponent(selected.id) + ':' + activeTab);
-}
-frame.onload = () => {
-    frame.contentDocument.addEventListener('click', event => {
-        const link = event.target.closest('a');
-        if (!link) return;
-        const href = link.getAttribute('href');
-        const suffixes = {review:'summary', inputs:'inputs', transcripts:'transcripts', statistics:'statistics', accounting:'accounting'};
-        for (const [suffix, tab] of Object.entries(suffixes)) {
-            if (href === selected.experiment + '-' + suffix + '.html') {
-                event.preventDefault();
-                show(tab);
-                return;
-            }
-        }
-    });
-};
-selector.onchange = () => { selected = experiments.find(entry => entry.id === selector.value); show(activeTab); };
-const saved = location.hash.slice(1).split(':');
-if (saved[0]) selected = experiments.find(entry => entry.id === decodeURIComponent(saved[0])) || selected;
-show(saved[1] || 'summary');
-</script></body></html>'''
+def render_viewer(entries):
+    template = (Path(__file__).with_name('assets') / 'collection-viewer.html').read_text(encoding='utf-8')
+    payload = json.dumps(entries, ensure_ascii=False).replace('&', '\\u0026').replace('<', '\\u003c')
+    return template.replace('__STYLES__', viewer_styles()).replace('__DATA__', payload)
