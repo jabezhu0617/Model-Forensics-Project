@@ -62,6 +62,7 @@ def parser():
     c = commands.add_parser("release-reasoning", help="Record post-conclusion access to archived reasoning")
     c.add_argument("conclusion")
     commands.add_parser("status", help="Show batch progress and missing labels without reading reasoning")
+    commands.add_parser("viewer", help="Export the combined offline viewer and laptop ZIP")
     commands.add_parser("doctor", help="Check local runtime and credential presence, without API requests")
     commands.add_parser("demo", help="Create an offline synthetic demonstration in a NEW study directory")
     return p
@@ -90,6 +91,9 @@ def main(argv=None):
 
 def dispatch(args, study):
     command = args.command
+    if command == "viewer":
+        from .collection_review import export_collection
+        return export_collection(study)
     if command == "configure":
         return w.configure(study, read(args.file))
     if command == "hypotheses":

@@ -1,6 +1,7 @@
 """Portable, offline transcript reviewer. It never opens the sealed archive."""
 
 import html
+import difflib
 import json
 import re
 from pathlib import Path
@@ -14,6 +15,82 @@ def viewer_styles():
     assets = Path(__file__).with_name("assets")
     return "\n".join((assets / name).read_text(encoding="utf-8")
                      for name in ("viewer-tokens.css", "viewer.css"))
+
+
+def input_section(title, content, baseline=None):
+    """Highlight current text while retaining exact before/after excerpts below it."""
+    esc = html.escape
+    rendered = esc(content)
+    notes = ''
+    if baseline is not None and baseline != content:
+        before = re.findall(r'\s+|\w+|[^\w\s]', baseline)
+        after = re.findall(r'\s+|\w+|[^\w\s]', content)
+        pieces = []
+        for operation, _, _, start, end in difflib.SequenceMatcher(None, before, after, autojunk=False).get_opcodes():
+            text = esc(''.join(after[start:end]))
+            if operation in ('insert', 'replace') and text:
+                text = '<mark class="input-edit">' + text + '</mark>'
+            pieces.append(text)
+        rendered = ''.join(pieces)
+        changes = []
+        before_lines = baseline.splitlines(keepends=True)
+        after_lines = content.splitlines(keepends=True)
+        for operation, start, end, new_start, new_end in difflib.SequenceMatcher(None, before_lines, after_lines, autojunk=False).get_opcodes():
+            if operation == 'equal':
+                continue
+            old = esc(''.join(before_lines[start:end]))
+            new = esc(''.join(after_lines[new_start:new_end]))
+            label = {'replace': 'Replaced passage', 'insert': 'Added passage', 'delete': 'Removed passage'}[operation]
+            change = '<li><p><strong>' + label + '</strong></p>'
+            if old:
+                change += '<p class="part-label">Baseline wording</p><pre class="input-before">' + old + '</pre>'
+            if new:
+                change += '<p class="part-label">Hypothesis wording</p><pre class="input-after">' + new + '</pre>'
+            changes.append(change + '</li>')
+        notes = '<div class="input-change-notes"><h3>What changed</h3><ul>' + ''.join(changes) + '</ul></div>'
+    return '<section class="input-block"><h2>' + esc(title) + '</h2><pre class="input-content">' + rendered + '</pre>' + notes + '</section>'
+
+
+def export_inputs(study, experiment):
+    """Export initial inputs only; never read trial messages or sealed responses."""
+    from .runner import TOOLS
+    esc = lambda value: html.escape(str(value))
+    prefix = esc(experiment['id'])
+    page = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            '<title>Evaluation inputs</title><style>' + viewer_styles() +
+            '</style></head><body><div class="container"><header class="masthead">'
+            '<div><h1>Evaluation inputs</h1><p>' + prefix + '</p></div></header>'
+            '<nav class="view-tabs" aria-label="Experiment views">'
+            f'<a href="{prefix}-review.html">Summary</a><a href="{prefix}-inputs.html" aria-current="page">Inputs</a>'
+            f'<a href="{prefix}-transcripts.html">Transcripts</a></nav><main class="summary-sheet">')
+
+    def section(title, content):
+        return '<section><h2>' + esc(title) + '</h2><pre>' + esc(content) + '</pre></section>'
+
+    page += '<section><h2>Initial input inventory</h2><p>Two prompts, four seeded workspace files, and two tools. File contents are read through commands, not inserted into the initial user message. The scratchpad is supplied scenario material, not memory from earlier baseline trials. Each attempt starts in a fresh container.</p><p>Prompts, files, model configuration, and settings below come from the frozen experiment. Tool schemas and sandbox behavior describe the current runner implementation; they are not independently frozen in the experiment record.</p><p>Prompt hash: <code>' + esc(experiment['prompt_hash']) + '</code></p></section>'
+    if experiment.get('hypothesis'):
+        hypothesis = study.get('hypotheses', experiment['hypothesis'])
+        page += section('Hypothesis', hypothesis['text'])
+        page += section('Prediction', json.dumps(experiment['expectation'], indent=2))
+        page += '<p class="muted">Highlighted text shows additions and replacements relative to the baseline. Each edited block includes its before-and-after wording below.</p>'
+    baseline = study.get('experiments', experiment['baseline'])['prompt'] if experiment.get('baseline') else None
+    for key in ('system', 'user'):
+        page += input_section(key.title() + ' prompt', experiment['prompt'][key], baseline[key] if baseline else None)
+    for name, content in experiment['prompt']['files'].items():
+        page += input_section('/agent/' + name, content, baseline['files'].get(name, '') if baseline else None)
+    page += '<section><h2>Tools</h2><p>execute_command(command) runs a shell command and returns output and exit code. submit(answers, technical_difficulties, suspicious_observations) ends the trial. Exactly one tool call is required per step.</p></section>'
+    page += section('Exact tool schemas', json.dumps(TOOLS, ensure_ascii=False, indent=2))
+    config = experiment['model_config']
+    safe_config = {k: config[k] for k in ('family', 'provider', 'model', 'base_url', 'extra') if k in config}
+    page += section('Model request configuration', json.dumps(safe_config, indent=2))
+    page += section('Frozen experiment settings', json.dumps(experiment['settings'], indent=2))
+    page += '<section><h2>Runtime and continuation</h2><p>Temperature, top-p, and seed are not explicitly supplied by the runner unless present in the configuration above. Commands run with sh in /agent. Output is capped at 50,000 bytes. The container has no network or host mounts, a read-only root filesystem, writable /agent and /tmp, 512 MB memory, one CPU, and a non-root user.</p><p>Subsequent requests include previous messages, command results, and provider reasoning fields for that same rollout. Dynamic outputs and generated responses belong to the transcript, not this initial-input page. Credentials are never included here.</p></section>'
+    page += '</main></div></body></html>'
+    output = study.root / 'reports' / (experiment['id'] + '-inputs.html')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(page, encoding='utf-8')
+    return output
 
 
 def transcript_fallback(records):
@@ -71,9 +148,21 @@ def export_summary(study, experiment, runs, score, sample, transcript_name):
         support_html += '<p class="muted">Individual support labels compare outcomes with the baseline. The hypothesis score uses the registered screening rule.</p>'
     comparison = ''
     if "baseline" in score and "test" in score:
-        comparison = f'<p>Baseline: <strong>{percent(score["baseline"]["rate"])}</strong></p><p>This experiment: <strong>{percent(score["test"]["rate"])}</strong></p>'
         delta = score.get("delta_percentage_points")
-        comparison += f'<p>Difference: <strong>{f"{delta:+.1f} percentage points" if delta is not None else "Not available"}</strong></p>'
+        metric = esc(experiment.get('expectation', {}).get('metric', 'concealed').replace('_', ' ').capitalize())
+        baseline_rate = score['baseline']['rate']
+        trial_rate = score['test']['rate']
+        baseline_label = f'{baseline_rate * 100:.2f}%' if baseline_rate is not None else 'Pending'
+        trial_label = f'{trial_rate * 100:.2f}%' if trial_rate is not None else 'Pending'
+        delta_label = f'{delta:+.2f}' if delta is not None else 'Pending'
+        comparison = (
+            f'<section><h2>{metric} rate compared with baseline</h2>'
+            '<div class="cards rate-comparison">'
+            f'<div><span>Baseline rate</span><strong>{baseline_label}</strong></div>'
+            f'<div><span>This experiment</span><strong>{trial_label}</strong></div>'
+            f'<div><span>Change from baseline</span><strong>{delta_label}</strong>'
+            '<span>percentage points</span></div></div>'
+            '<p class="muted">Change = experiment rate − baseline rate. Positive values indicate an increase and negative values indicate a decrease.</p></section>')
     # Explicit allowlist prevents run-level evidence from entering this document.
     details = {key: score[key] for key in ("status", "complete", "scoring_rule", "expected", "change_unit", "range_supported", "directional_change") if key in score}
     sampling = {key: {"available": value["available"], "selected": len(value["runs"]), "shortfall": value["shortfall"]} for key, value in sample["selection"].items()}
@@ -83,8 +172,9 @@ def export_summary(study, experiment, runs, score, sample, transcript_name):
     page += f'<header class="masthead"><div><h1>Experiment summary</h1><p class="experiment">{esc(title)}</p></div><p class="description">Hypotheses and aggregate results. Transcripts are separate for scoring review.</p></header>'
     page += f'<nav class="view-tabs" aria-label="Experiment views"><a href="{esc(experiment["id"])}-review.html" aria-current="page">Summary</a><a href="{esc(transcript_name)}">Transcripts</a></nav><main class="summary-sheet">'
     page += f'<section><h2>Hypothesis</h2>{hypothesis_html}<p class="muted">Model: {esc(experiment["model"])}</p><p class="muted">Experiment type: {esc(experiment["kind"])}</p></section>'
+    page += comparison
     page += '<section><h2>Run outcomes</h2><div class="cards">' + ''.join(f'<div><span>{esc(k)}</span><strong>{esc(v)}</strong></div>' for k, v in cards) + '</div><p class="muted">Counts use saved records and imported annotations. Browser drafts are not included.</p></section>'
-    page += f'<section><h2>Hypothesis support</h2>{support_html}{comparison}</section>'
+    page += f'<section><h2>Hypothesis support</h2>{support_html}</section>'
     page += '<section><details><summary>Scoring rules and sampling totals</summary><pre>' + esc(json.dumps({"scoring": details, "sampling": sampling}, indent=2)) + '</pre></details></section></main></div></body></html>'
     output = study.root / "reports" / (experiment["id"] + "-review.html")
     output.write_text(page, encoding="utf-8")
@@ -171,9 +261,15 @@ def export_review(study, experiment_id):
     page = page.replace("__TITLE__", title).replace("__SUMMARY__", summary).replace("__DATA__", data)
     output = study.root / "reports" / (experiment_id + "-transcripts.html")
     output.parent.mkdir(parents=True, exist_ok=True)
+    inputs = export_inputs(study, experiment)
+    inputs_link = '<a href="' + html.escape(inputs.name) + '">Inputs</a>'
+    page = page.replace('<a href="#" aria-current="page">Transcripts</a>', inputs_link + '<a href="#" aria-current="page">Transcripts</a>')
     output.write_text(page, encoding="utf-8")
     overview = export_summary(study, experiment, runs, score, sample, output.name)
-    return {"review": str(overview), "transcripts": str(output), "runs": len(runs), "sample": sample["selection"]}
+    summary_page = overview.read_text(encoding='utf-8')
+    summary_page = summary_page.replace('<a href="' + html.escape(output.name) + '">Transcripts</a>', inputs_link + '<a href="' + html.escape(output.name) + '">Transcripts</a>')
+    overview.write_text(summary_page, encoding='utf-8')
+    return {"review": str(overview), "inputs": str(inputs), "transcripts": str(output), "runs": len(runs), "sample": sample["selection"]}
 
 
 def export_prompt(study, experiment_id):
