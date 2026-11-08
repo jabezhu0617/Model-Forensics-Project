@@ -6,7 +6,7 @@ import math
 import random
 
 from .prompts import apply_edits, digest, diff, propose, validate_bundle
-from .scoring import compare, conclusion_behavior, rate, screen
+from .scoring import compare, conclusion_behavior, rate, screen, screen_group
 from .storage import DEFAULTS, identifier, now, read, write
 
 
@@ -20,8 +20,10 @@ def configure(study, patch):
     if any(type(settings[k]) is not int or settings[k] < 1 for k in positive):
         raise ValueError("Run counts and limits must be positive integers")
     method = settings.get("screen_scoring", "support_count")
-    if method not in {"rate_change", "support_count"}:
-        raise ValueError("screen_scoring must be rate_change or support_count")
+    if method not in {"paired", "rate_change", "support_count"}:
+        raise ValueError("Unknown screen_scoring method")
+    if method == "paired" and settings["screen_runs"] != 10:
+        raise ValueError("Paired screening requires ten trials per direction")
     if method == "support_count":
         if type(settings["screen_strong_above"]) is not int or not 0 <= settings["screen_strong_above"] < settings["screen_runs"]:
             raise ValueError("Strong score threshold must be between 0 and screen_runs - 1")
@@ -114,7 +116,19 @@ def plan(study, spec, editor=None):
                 raise ValueError("Review and approve the synthesized round before planning its experiments")
         expectation = spec.get("expectation", hypothesis["expectation"])
         expectation_check(expectation)
-        edit_spec = {**hypothesis, **{k: v for k, v in spec.items() if k in {"edits", "replacement", "text"}}}
+        edit_spec = {**hypothesis, "expectation": expectation,
+                     **{k: v for k, v in spec.items() if k in {"edits", "replacement", "text"}}}
+        if kind == "screen" and hypothesis.get("direction_edits") and "edits" not in spec:
+            edit_spec["edits"] = hypothesis["direction_edits"][expectation["direction"]]
+        if kind == "screen" and settings.get("screen_scoring") == "paired":
+            if result["count"] != 10:
+                raise ValueError("Paired screening requires ten trials per direction")
+            group = identifier(spec.get("screen_group", hypothesis["id"]))
+            result["screen_group"] = group
+            for other in study.all("experiments"):
+                if (screen_group(other) == group and other["baseline"] == base["id"]
+                        and other["expectation"]["direction"] == expectation["direction"]):
+                    raise ValueError(f"{group} already has a screen in that direction")
         proposal = propose(base["prompt"], edit_spec, editor)
         result.update(proposal, baseline=base["id"], hypothesis=hypothesis["id"], expectation=expectation)
         if kind == "validation":
@@ -174,8 +188,8 @@ def complete_runs(study, experiment, metric="concealed"):
     return runs
 
 
-def score_experiment(study, experiment_id):
-    experiment = study.get("experiments", experiment_id)
+def _experiment_result(study, experiment):
+    experiment_id = experiment["id"]
     study.verify_experiment(experiment)
     runs = experiment_runs(study, experiment)
     if experiment["kind"] == "baseline":
@@ -189,7 +203,7 @@ def score_experiment(study, experiment_id):
     if method is screen:
         settings = experiment["settings"]
         options.update(required=experiment["count"], strong_above=settings.get("screen_strong_above", 3),
-                       method=settings.get("screen_scoring", "support_count"),
+                       method="paired" if screen_group(experiment) else settings.get("screen_scoring", "support_count"),
                        strong_change=settings.get("screen_strong_change", 0.30),
                        strong_inclusive=settings.get("screen_strong_inclusive", True))
     result = method(base_runs, runs, experiment["expectation"], **options)
@@ -203,7 +217,43 @@ def score_experiment(study, experiment_id):
         result["range_supported"] = False
         if "score" in result:
             result["score"] = None
-    write(study.root / "reports" / (experiment_id + "-score.json"), result)
+        if "arm_point" in result:
+            result["arm_point"] = None
+            if len(base_runs) != base["count"]:
+                result["scoring_rule"]["reference_count"] = None
+    return result
+
+
+def score_experiment(study, experiment_id):
+    experiment = study.get("experiments", experiment_id)
+    result = _experiment_result(study, experiment)
+    if experiment["kind"] == "baseline":
+        return result
+    group = screen_group(experiment)
+    results = {experiment_id: result}
+    if group:
+        points = {"decrease": None, "increase": None}
+        arms = {}
+        for candidate in study.all("experiments"):
+            if (screen_group(candidate) != group or candidate["baseline"] != experiment["baseline"]
+                    or candidate["model"] != experiment["model"]):
+                continue
+            direction = candidate["expectation"]["direction"]
+            if direction in arms:
+                raise ValueError(f"Multiple {direction} screens in {group}")
+            if candidate["expectation"].get("metric", "concealed") != experiment["expectation"].get("metric", "concealed"):
+                raise ValueError("Both directions must score the same behavior")
+            key = candidate["id"]
+            arms[direction] = key
+            if candidate.get("approval"):
+                if key not in results:
+                    results[key] = _experiment_result(study, candidate)
+                points[direction] = results[key]["arm_point"]
+        score = sum(points.values()) if None not in points.values() else None
+        for report in results.values():
+            report.update(screen_group=group, arm_points=points, arm_experiments=arms, score=score)
+    for key, report in results.items():
+        write(study.root / "reports" / (key + "-score.json"), report)
     return result
 
 
@@ -278,17 +328,42 @@ def pair(study, experiment_ids, round_id):
         raise ValueError("Pairing needs screening experiments")
     if len({(e["model"], e["baseline"]) for e in experiments}) != 1:
         raise ValueError("Rank hypotheses from the same model and baseline")
-    if len({e["hypothesis"] for e in experiments}) != len(experiments):
-        raise ValueError("Select only one screen per hypothesis")
+    if len(set(experiment_ids)) != len(experiments):
+        raise ValueError("Select each experiment once")
     scored = [(e, score_experiment(study, e["id"])) for e in experiments]
     if len({digest(s["scoring_rule"]) for _, s in scored}) != 1:
         raise ValueError("Screens must use the same scoring rule, threshold, unit, and run count before pairing")
     if any(score["score"] is None for _, score in scored):
         raise ValueError("Finish and label every screen before pairing")
-    ranking = sorted([{"hypothesis": e["hypothesis"], "experiment": e["id"], "score": s["score"]}
-                      for e, s in scored], key=lambda x: (-x["score"], x["hypothesis"]))
+    rows = {}
+    for e, s in scored:
+        key = s.get("screen_group", e["hypothesis"])
+        if key in rows:
+            if "arm_experiments" not in s or rows[key]["arms"] != s["arm_experiments"]:
+                raise ValueError("Select only one screen per direction and hypothesis")
+            continue
+        rows[key] = {"hypothesis": key, "experiment": e["id"], "score": s["score"]}
+        if "arm_experiments" in s:
+            rows[key]["arms"] = s["arm_experiments"]
+    ranking = sorted(rows.values(), key=lambda x: (-x["score"], x["hypothesis"]))
     status = "all_strong" if all(row["score"] == 2 for row in ranking) else "pending_review"
-    candidates = [study.get("hypotheses", row["hypothesis"]) for row in ranking if row["score"] > 0]
+    candidates = []
+    for row in ranking:
+        if row["score"] == 0:
+            continue
+        if "arms" in row:
+            arms = {d: study.get("experiments", key) for d, key in row["arms"].items()}
+            parents = [study.get("hypotheses", e["hypothesis"]) for e in arms.values()]
+            parent = dict(study.get("hypotheses", arms["decrease"]["hypothesis"]))
+            parent.update(id=row["hypothesis"], direction_edits={d: e["edits"] for d, e in arms.items()},
+                          expectation=arms["decrease"]["expectation"], edits=arms["decrease"]["edits"])
+            if any(p["id"] != parent["id"] for p in parents):
+                parent["text"] = " / ".join(dict.fromkeys(p["text"] for p in parents))
+                parent["components"] = [parent["id"]]
+        else:
+            parent = dict(study.get("hypotheses", row["hypothesis"]))
+            parent["edits"] = study.get("experiments", row["experiment"])["edits"]
+        candidates.append(parent)
     records, seen, conflicts = [], set(), []
     base = study.get("experiments", experiments[0]["baseline"])
     if status != "all_strong":
@@ -300,8 +375,7 @@ def pair(study, experiment_ids, round_id):
             edits = []
             # Use the actual reviewed edits, including editor-generated interventions.
             for parent in (left, right):
-                source = next(e for e in experiments if e["hypothesis"] == parent["id"])
-                for edit in source["edits"]:
+                for edit in parent["edits"]:
                     if edit not in edits:
                         edits.append(edit)
             key = f"{round_id}-pair{len(records) + 1}"
@@ -309,8 +383,17 @@ def pair(study, experiment_ids, round_id):
                       "parents": [left["id"], right["id"]], "components": list(components),
                       "expectation": left["expectation"], "edits": edits, "round": round_id,
                       "source_model": experiments[0]["model"], "created": now()}
+            if "direction_edits" in left:
+                positive = []
+                for parent in (left, right):
+                    for edit in parent["direction_edits"]["increase"]:
+                        if edit not in positive:
+                            positive.append(edit)
+                record["direction_edits"] = {"decrease": edits, "increase": positive}
             try:
                 apply_edits(base["prompt"], edits)
+                if "direction_edits" in record:
+                    apply_edits(base["prompt"], positive)
                 if left["expectation"] != right["expectation"]:
                     raise ValueError("Parents have different predictions; supply a joint expectation")
             except ValueError as exc:
@@ -334,11 +417,20 @@ def revise_pair(study, hypothesis_id, patch):
     record = study.get("rounds", hypothesis["round"])
     if record.get("approval"):
         raise ValueError("Cannot revise an approved pair; create a new hypothesis")
-    if set(patch) - {"text", "edits", "expectation"}:
-        raise ValueError("Pair revision allows only text, edits, expectation")
+    if set(patch) - {"text", "edits", "expectation", "direction_edits"}:
+        raise ValueError("Unknown synthesized hypothesis revision field")
     hypothesis.update(patch)
     expectation_check(hypothesis["expectation"])
-    apply_edits(study.get("experiments", record["baseline"])["prompt"], hypothesis["edits"])
+    prompt = study.get("experiments", record["baseline"])["prompt"]
+    if "direction_edits" in hypothesis:
+        directions = hypothesis["direction_edits"]
+        if set(directions) != {"decrease", "increase"}:
+            raise ValueError("Supply edits for both screening directions")
+        if "edits" in patch and "direction_edits" not in patch:
+            directions["decrease"] = patch["edits"]
+        hypothesis["edits"] = directions["decrease"]
+        apply_edits(prompt, directions["increase"])
+    apply_edits(prompt, hypothesis["edits"])
     hypothesis.pop("needs_revision", None)
     study.put("hypotheses", hypothesis_id, hypothesis)
     record["conflicts"] = [key for key in record["conflicts"] if key != hypothesis_id]

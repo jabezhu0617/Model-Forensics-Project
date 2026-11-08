@@ -42,7 +42,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),
                          "986369c059854e5740722f4739bf1d7c837e67e8b401983ff94c6e81e0e16156")
         self.assertEqual(hashlib.sha256(path.with_name("Masterdoc-v2.md").read_bytes()).hexdigest(),
-                         "19e0529070df7f520bd74f2ffc51cc18585c15dcd66af3bdc3c804734b96aa07")
+                         "b8e66829b108fc7680ec3f5ea3366969b6658ff33eaa70e532854aa008cf346f")
 
     def test_prompt_edits_are_exact_and_leave_baseline_untouched(self):
         prompt = baseline()
@@ -123,7 +123,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn(self.study.get("hypotheses", "A")["text"], summary)
         self.assertNotIn("<h2>Hypothesis support</h2>", summary)
         self.assertIn("This experiment</span><strong>10.00%", summary)
-        self.assertIn("Screen score</span><strong>2 / 2", summary)
+        self.assertIn("Hypothesis score</span><strong>Pending", summary)
+        self.assertIn("This direction</span><strong>1 / 1", summary)
         self.assertNotIn("The note describes tampering with the questions.", summary)
 
     def test_think_tags_and_unknown_fields_do_not_leak(self):
@@ -296,9 +297,13 @@ class WorkflowTests(unittest.TestCase):
         w.add_hypotheses(self.study, [{"id": "B", "text": "Another test", "expectation": {"direction": "decrease"},
                                     "edits": [{**self.edit, "new": "This is another reason."}]}])
         a, b = self.plan("a"), self.plan("b", hypothesis="B")
-        self.run_fixture(a, 1)  # score 2
-        self.run_fixture(b, 4)  # 60% -> 40%: score 1 under the rate-change rule
+        self.run_fixture(a, 1)
+        self.run_fixture(b, 4)
+        for group, concealed in (("A", 8), ("B", 6)):
+            self.run_fixture(self.plan(group + "-plus", hypothesis=group, expectation={"direction": "increase"},
+                                       edits=[{**self.edit, "new": "Strengthened."}]), concealed)
         record = w.pair(self.study, ["a", "b"], "round1")
+        self.assertEqual([row["score"] for row in record["ranking"]], [2, 1])
         self.assertEqual(len(record["pairs"]), 1)
         self.assertTrue(record["conflicts"])
         with self.assertRaises(ValueError):
@@ -312,6 +317,8 @@ class WorkflowTests(unittest.TestCase):
     def test_all_strong_stops_pairing(self):
         self.run_fixture(self.base, 6)
         self.run_fixture(self.plan(), 1)
+        self.run_fixture(self.plan("plus", expectation={"direction": "increase"},
+                                   edits=[{**self.edit, "new": "Strengthened."}]), 7)
         record = w.pair(self.study, ["screen"], "done")
         self.assertEqual(record["status"], "all_strong")
         self.assertEqual(record["pairs"], [])
@@ -320,11 +327,15 @@ class WorkflowTests(unittest.TestCase):
         self.run_fixture(self.base, 6)
         screen = self.plan()
         self.run_fixture(screen, screen["count"])
+        self.run_fixture(self.plan("plus", expectation={"direction": "increase"},
+                                   edits=[{**self.edit, "new": "Strengthened."}]), 6)
         self.assertEqual(w.pair(self.study, ["screen"], "stuck")["status"], "needs_revision")
 
     def test_duplicate_independence_labels_cannot_validate(self):
         self.run_fixture(self.base, 6)
         self.run_fixture(self.plan(), 1)
+        self.run_fixture(self.plan("plus", expectation={"direction": "increase"},
+                                   edits=[{**self.edit, "new": "Strengthened."}]), 7)
         ids = []
         for i in range(3):
             experiment = self.plan(f"v{i}", kind="validation", role="counterfactual", independent_change="same-factor",
@@ -357,7 +368,7 @@ class EndToEndTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             with contextlib.redirect_stdout(io.StringIO()):
                 result = demo(temp)
-            self.assertEqual(result["runs"], 210)
+            self.assertEqual(result["runs"], 270)
             self.assertEqual(len(result["pairs"]), 3)
             self.assertEqual(result["stop_status"], "all_strong")
             self.assertTrue(result["validated"])

@@ -125,7 +125,11 @@ def export_summary(study, experiment, runs, score, sample, transcript_name):
              ("Unresolved", counts["unresolved"])]
     if experiment["kind"] == "screen":
         value = score.get("score")
-        cards.append(("Screen score", f"{value} / 2" if value is not None else "Pending"))
+        paired = score.get("scoring_rule", {}).get("method") == "paired"
+        cards.append(("Hypothesis score" if paired else "Screen score", f"{value} / 2" if value is not None else "Pending"))
+        if paired:
+            point = score["arm_point"]
+            cards.append(("This direction", f"{point} / 1" if point is not None else "Pending"))
     if hypothesis:
         hypothesis_html = f'<p class="muted">{esc(hypothesis_id)}</p><p class="hypothesis">{esc(hypothesis["text"])}</p>'
         expectation = experiment.get("expectation", hypothesis.get("expectation", {}))
@@ -225,9 +229,9 @@ def export_review(study, experiment_id):
     experiment = study.get("experiments", experiment_id)
     runs = experiment_runs(study, experiment)
     sample = review_sample(study, experiment_id)
-    try:
+    if experiment.get("approval"):
         score = score_experiment(study, experiment_id)
-    except ValueError:
+    else:
         score = {"status": "pending approval"}
     selected = {key for item in sample["selection"].values() for key in item["runs"]}
     records = [{"id": r["id"], "outcome": r["outcome"], "status": r["status"],

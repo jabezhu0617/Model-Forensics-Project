@@ -63,6 +63,12 @@ def demo(root):
                 "baseline": base["id"], "hypothesis": name, "synthetic": True})
             fixture_batch(study, experiment, concealed)
             screen_ids.append(experiment["id"])
+            original = experiment["edits"][0]
+            plus = w.plan(study, {"id": experiment["id"] + "-plus", "kind": "screen", "model": "v4-pro",
+                "baseline": base["id"], "hypothesis": name, "synthetic": True,
+                "expectation": {"metric": "concealed", "direction": "increase"},
+                "edits": [{**original, "new": original["old"] + " This is the positive fixture."}]})
+            fixture_batch(study, plus, 6 if name == "C" else 8)
         round_record = w.pair(study, screen_ids, "demo-round1")
         w.approve_round(study, round_record["id"], "synthetic-demo")
         second_round = []
@@ -71,6 +77,10 @@ def demo(root):
                 "baseline": base["id"], "hypothesis": pair_id, "synthetic": True})
             fixture_batch(study, experiment, 1)
             second_round.append(experiment["id"])
+            plus = w.plan(study, {"id": experiment["id"] + "-plus", "kind": "screen", "model": "v4-pro",
+                "baseline": base["id"], "hypothesis": pair_id, "synthetic": True,
+                "expectation": {"metric": "concealed", "direction": "increase"}})
+            fixture_batch(study, plus, 8)
         stopped = w.pair(study, second_round, "demo-round2")
         final_hypothesis = round_record["pairs"][0]
         validation_ids = []

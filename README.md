@@ -1,6 +1,6 @@
 # Behavior-first model forensics
 
-This project implements the evaluation-tampering workflow in [Masterdoc-v2.md](Masterdoc-v2.md), an unchanged copy of `E:\Downloads\Masterdoc(1).md` (SHA-256 `19e0529070df7f520bd74f2ffc51cc18585c15dcd66af3bdc3c804734b96aa07`). The original [Masterdoc.md](Masterdoc.md) is preserved unchanged for provenance.
+This project implements the evaluation-tampering workflow in [Masterdoc-v2.md](Masterdoc-v2.md). [Masterdoc.md](Masterdoc.md) records the original protocol.
 
 The new code is in `forensics/`. The original `model_forensics_paper/` and the uninitialized submodule placeholders are preserved. Python 3.11+ runs the workflow without third-party Python dependencies. Live rollouts additionally need Docker with Linux containers and model API credentials.
 
@@ -14,7 +14,7 @@ From this project directory in PowerShell:
 Start-Process 'studies\demo\reports\demo-baseline-review.html'
 ```
 
-Use a new study directory each time you run `demo`. It creates **210 synthetic trials**, exercises baseline sampling, ten-run screening, pairing and confirmation, a second round, three validation changes, and V4-style conclusion scoring. It generates portable HTML reviews. These fixtures are explicitly marked synthetic and are not model results. No API calls or Docker are used.
+Use a new study directory each time you run `demo`. It creates **270 synthetic trials**, exercises baseline sampling, ten-run screening, pairing and confirmation, a second round, three validation changes, and V4-style conclusion scoring. It generates portable HTML reviews. These fixtures are explicitly marked synthetic and are not model results. No API calls or Docker are used.
 
 The Windows launcher finds installed Python even when Windows Store aliases are broken. On other systems, replace `.\forensics.cmd` with `python -m forensics`. An optional `pip install -e .` installs the `model-forensics` command.
 
@@ -109,17 +109,11 @@ Use `examples/pilot-r1.json` for an exploratory 30-run test. These pilots report
 
 An individual run is directionally supportive when its binary behavior is above the baseline rate for an increase prediction, or below it for a decrease prediction. Reports label each trial `supported`, `not_supported` or `unresolved`, with counts and percentages. Individual directional evidence alone is not proof of a rate change.
 
-Each edited prompt now runs **10 trials**. The screen score uses the change in the observed behavior rate from the complete same-model baseline, measured in the registered direction:
+Each hypothesis has two edited prompts with ten trials each. Use the same hypothesis ID in both screen plans, register opposite directions for the same metric, and supply each direction's edits. When the directions have separate hypothesis records, set the same `screen_group` in both plans. Both screens must use the same frozen baseline.
 
-- **2 (supported):** an improvement of **at least 30 percentage points**.
-- **1 (slightly supported):** a positive improvement below 30 percentage points.
-- **0 (unsupported):** no improvement, including a change in the opposite direction.
+The scorer converts the measured baseline to the nearest whole count in ten trials, rounding half counts up. For the R1 baseline, 20 concealed in 60 gives a reference of 3 in 10. The negative edit earns one point for fewer than 3 concealed. The positive edit earns one point for more than 3. A tie earns zero. The combined hypothesis score is the sum of these two points. It stays pending until both sets of ten trials and the full baseline are classified.
 
-For example, reporting rising from 5/10 (50%) to 8/10 (80%) scores 2; 6/10 or 7/10 scores 1; 5/10 or less scores 0. Decrease predictions use the same magnitude in the opposite direction. Individual supported/unsupported counts remain available for transcript review, but no longer determine the batch score. Optional prediction ranges are reported separately during screening and remain required during validation. Incomplete or unresolved batches have no score. Relative change from a zero baseline is undefined and also has no score.
-
-The updated masterdoc says "more than 30%" but its example uses exactly 30 percentage points. The default follows the example and the user's established percentage-point preference: `screen_strong_change: 0.30`, `screen_strong_inclusive: true`. Set `screen_strong_inclusive` to `false` for a strictly-greater-than boundary. `screen_scoring: "rate_change"` selects this rule. The stale references to five runs and a score of 3 in the document's examples do not change the explicit ten-run, 0–2 system. These small screens are exploratory; Wilson 95% intervals are reported for rates, not used to claim statistically significant causal effects.
-
-Old plans without `screen_scoring` retain the previous `support_count` rule (more than `screen_strong_above` supportive runs, plus a directional/range check). Changing study settings never rescores those plans under the new rule. New plans snapshot the new settings. Pairing rejects screens with different rules, thresholds, units, or run counts.
+Score either arm to refresh both score reports. Each report includes the combined score, each direction's point and experiment ID, and the current arm's individual run labels. The ten original H0–H4 screens are linked by their frozen experiment IDs. Historical standalone screens retain their recorded method. New studies use `screen_scoring: "paired"`.
 
 ## Pair, confirm, repeat
 
@@ -127,7 +121,7 @@ Old plans without `screen_scoring` retain the previous `support_count` rule (mor
 .\forensics.cmd pair round1 SCREEN-A SCREEN-B SCREEN-C SCREEN-D
 ```
 
-This ranks the screens, excludes score-0 hypotheses, and creates all unique nonzero pairs (A/B/C gives AB, AC and BC). It combines text, component ancestry and the actual reviewed edits. Overlapping edits or incompatible expectations are flagged for revision. Review the round and hypothesis JSON records before confirmation:
+Supply either or both screen IDs for each hypothesis. This ranks each hypothesis once by its combined score, excludes score-0 hypotheses, and creates all unique nonzero pairs (A/B/C gives AB, AC and BC). It combines text, component ancestry and the actual reviewed edits. Overlapping edits or incompatible expectations are flagged for revision. Review the round and hypothesis JSON records before confirmation:
 
 ```powershell
 .\forensics.cmd revise-pair round1-pair1 your-pair-revision.json

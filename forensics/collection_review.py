@@ -5,15 +5,15 @@ import re
 from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 
-from .review import export_review, export_inputs, transcript_fallback, viewer_styles
+from .prompts import apply_edits, targets
+from .review import export_review, export_inputs, input_section, transcript_fallback, viewer_styles
+from .scoring import screen_group
 from .transcript_display import display_messages
 from .storage import Study, read
 
 
 def experiment_label(experiment):
     key = experiment['id']
-    if key == 'laptop-test':
-        return 'Laptop Test'
     if experiment.get('kind') != 'screen':
         return key
     name = key
@@ -35,11 +35,11 @@ def experiment_label(experiment):
 
 
 def hypothesis_arm(source, experiment):
-    if experiment.get('kind') != 'screen':
+    group = screen_group(experiment)
+    if not group or experiment['expectation'].get('metric', 'concealed') != 'concealed':
         return None
-    name, separator, topic = experiment_label(experiment).partition(' — ')
-    if not separator or not re.fullmatch(r'H\d+[−+]', name):
-        return None
+    _, _, topic = experiment_label(experiment).partition(' — ')
+    sign = '+' if experiment['expectation']['direction'] == 'increase' else '−'
     score_path = source.root / 'reports' / (experiment['id'] + '-score.json')
     score = read(score_path) if experiment.get('approval') and score_path.exists() else {}
     trials = []
@@ -47,11 +47,59 @@ def hypothesis_arm(source, experiment):
         run = source.public_run(record)
         outcome = run['outcome'] if run['status'] == 'complete' else 'unresolved'
         trials.append({'id': run['id'], 'status': run['status'], 'outcome': outcome})
-    return {'group': name[:-1], 'sign': name[-1], 'topic': topic,
+    return {'group': group, 'sign': sign, 'topic': topic or experiment['hypothesis'],
             'baseline': experiment['baseline'], 'model': experiment['model'],
             'score': score.get('score'), 'baseline_rate': score.get('baseline', {}).get('rate'),
+            'point': score.get('arm_point'), 'reference': score.get('scoring_rule', {}).get('reference_count'),
             'attempt_count': score.get('total_attempts_including_retries'),
             'trials': trials}
+
+
+def combined_screen_entries(study, entries):
+    """Fill missing screen directions from their proposals until experiments exist."""
+    planned = {(entry['arm']['baseline'], entry['arm']['group'], entry['arm']['sign']): entry
+               for entry in entries if entry['study'] == study.root.name and entry['arm']}
+    drafts = []
+    for record in study.all('rounds'):
+        if record.get('model') == 'v4-pro' or not record.get('pairs'):
+            continue
+        base = study.get('experiments', record['baseline'])
+        if base.get('synthetic'):
+            continue
+        original = targets(base['prompt'])
+        hypotheses = [study.get('hypotheses', key) for key in record['pairs']]
+        for hypothesis in sorted(hypotheses, key=lambda h: sorted(h['parents'])):
+            if not hypothesis.get('direction_edits'):
+                continue
+            key = hypothesis['id']
+            label = ' + '.join(sorted(hypothesis['parents']))
+            for direction, sign in [('decrease', '−'), ('increase', '+')]:
+                existing = planned.get((base['id'], key, sign))
+                if existing:
+                    existing['pair_label'] = label
+                    existing['round_id'] = record['id']
+                    continue
+                try:
+                    prompt = apply_edits(base['prompt'], hypothesis['direction_edits'][direction])
+                    sections = ''.join(input_section(name, content, original[name])
+                                       for name, content in targets(prompt).items())
+                except ValueError as exc:
+                    sections = '<p>Draft edits need revision. ' + html.escape(str(exc)) + '</p>'
+                inputs = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><style>'
+                          + viewer_styles() + '</style></head><body><main class="container"><h1>'
+                          + html.escape(label + sign) + ' · Proposed inputs</h1>'
+                          + sections + '</main></body></html>')
+                drafts.append({
+                    'id': f"{study.root.name}/rounds/{record['id']}/{key}/{direction}",
+                    'study': study.root.name, 'pair_label': label, 'round_id': record['id'],
+                    'title': hypothesis['text'], 'approved': False, 'runs': 0, 'requested': 10,
+                    'pages': {'inputs': inputs}, 'arm': {
+                        'baseline': base['id'], 'model': record['model'], 'group': key,
+                        'sign': sign, 'topic': direction + ' concealment', 'trials': [],
+                        'score': None, 'point': None, 'attempt_count': 0,
+                    },
+                })
+    return drafts
 
 
 def export_collection(study):
@@ -64,7 +112,7 @@ def export_collection(study):
         for experiment in source.all('experiments'):
             if (experiment.get('synthetic', False)
                     or experiment.get('model') == 'v4-pro'
-                    or experiment['id'] == 'r1-reason-screen'
+                    or experiment['id'] in {'r1-reason-screen', 'laptop-test', 'r1-eval-pilot'}
                     or experiment['id'].startswith('r1-setup-check')):
                 continue
             experiment_id = experiment['id']
@@ -112,7 +160,7 @@ def export_collection(study):
                                     entry['experiment'] != 'r1-baseline',
                                     entry['display_name'].split(' — ')[0].rstrip('−+'), '+' in entry['display_name'].split(' — ')[0],
                                     entry['display_name']))
-    page = render_viewer(entries)
+    page = render_viewer(entries + combined_screen_entries(study, entries))
     output = study.root / 'reports' / 'viewer.html'
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(page, encoding='utf-8')

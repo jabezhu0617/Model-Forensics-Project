@@ -39,7 +39,7 @@ def identifier(value):
 DEFAULTS = {
     "baseline_runs": 60, "review_per_outcome": 15, "screen_runs": 10,
     "pilot_runs": 30, "validation_runs": 30, "validation_min_changes": 3,
-    "screen_scoring": "rate_change", "screen_strong_change": 0.30,
+    "screen_scoring": "paired", "screen_strong_change": 0.30,
     "screen_strong_inclusive": True,
     "screen_strong_above": 3, "conclusion_baseline_above": 0.50,
     "conclusion_increase_above": 0.25, "conclusion_decrease_above": 0.25,
