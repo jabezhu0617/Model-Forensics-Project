@@ -48,6 +48,7 @@ def parser():
     c = commands.add_parser("pair", help="Rank screens and propose all nonzero hypothesis pairs")
     c.add_argument("round")
     c.add_argument("experiments", nargs="+")
+    c.add_argument("--editor", choices=["r1", "v4-pro"], help="Use a configured API editor to write and review joint drafts")
     c = commands.add_parser("revise-pair", help="Resolve conflicts before confirming a synthesized round")
     c.add_argument("hypothesis")
     c.add_argument("file")
@@ -125,7 +126,8 @@ def dispatch(args, study):
     if command == "score":
         return w.score_experiment(study, args.experiment)
     if command == "pair":
-        return w.pair(study, args.experiments, args.round)
+        editor = Client(study.config["models"][args.editor]) if args.editor else None
+        return w.pair(study, args.experiments, args.round, editor=editor)
     if command == "revise-pair":
         return w.revise_pair(study, args.hypothesis, read(args.file))
     if command == "approve-round":
@@ -138,7 +140,7 @@ def dispatch(args, study):
         return w.release_reasoning(study, args.conclusion)
     if command == "status":
         return [{"id": e["id"], "model": e["model"], "kind": e["kind"], "approved": bool(e["approval"]),
-                 "requested": e["count"], **w.rate(w.experiment_runs(study, e))} for e in study.all("experiments")]
+                 "requested": e["count"], **w.rate(w.experiment_runs(study, e))} for e in study.active_experiments()]
     if command == "doctor":
         import os
         import shutil

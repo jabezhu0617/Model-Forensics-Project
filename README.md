@@ -121,14 +121,17 @@ Score either arm to refresh both score reports. Each report includes the combine
 .\forensics.cmd pair round1 SCREEN-A SCREEN-B SCREEN-C SCREEN-D
 ```
 
-Supply either or both screen IDs for each hypothesis. This ranks each hypothesis once by its combined score, excludes score-0 hypotheses, and creates all unique nonzero pairs (A/B/C gives AB, AC and BC). It combines text, component ancestry and the actual reviewed edits. Overlapping edits or incompatible expectations are flagged for revision. Review the round and hypothesis JSON records before confirmation:
+Supply either or both screen IDs for each hypothesis. This ranks each hypothesis once, excludes score-0 hypotheses, and identifies unique combinations by their underlying components. The default local command records the parent screen IDs and marks each combination as awaiting a joint draft. Write a joint hypothesis statement and develop each direction from the mechanisms its parents tested. In later rounds the same process applies to triples and larger combinations.
+
+For automated drafting, add `--editor r1` (or another configured editor listed in `pair --help`). This sends the frozen baseline and parent prompt edits to that editor. It writes one scenario per direction, applies the proposed edits, then reads the **complete resulting prompts** to check the actors, motives, score consequences and consistency across files. It can revise a draft once in response to issues. Unresolved drafts stay pending. Offline, supply the joint statement as `text` and the two authored edit lists as `direction_edits.decrease` and `direction_edits.increase` using `revise-pair`.
 
 ```powershell
 .\forensics.cmd revise-pair round1-pair1 your-pair-revision.json
+.\forensics.cmd viewer
 .\forensics.cmd approve-round round1 --reviewer 'Your name'
 ```
 
-`revise-pair` accepts a JSON object containing `text`, `edits` and/or `expectation`; it is needed only for changes/conflicts. Create screen specifications referencing the new hypothesis IDs, then plan, review, approve and run those screens. `approve-round` is required before planning synthesized hypotheses, and each resulting prompt still needs its own approval. Repeat `pair` on the new round's screens. It returns `all_strong` with no further pairs when all scores are 2. If no useful new combination can be formed it returns `needs_revision`, allowing you to strengthen or replace hypotheses instead of looping forever.
+Export the viewer with `.\forensics.cmd viewer` and read both arms before confirming the round. Check the user request, deployment notes, scratchpad and question file together. For example, an H1− tutor score must determine whether the model qualifies for the university trial. In H0 combinations the note should establish the partner’s weak motive before judging why it was inadequate. Once confirmed, plan screens from the approved edits. Each screen still needs its own approval. Repeat `pair` on the resulting screens. It returns `all_strong` when all scores are 2 and `needs_revision` when no new combination can be formed.
 
 ## Validate predictions and counterfactuals
 
@@ -173,7 +176,7 @@ Edit the settings file first. Baseline size, sample quota, screening size, rate-
 | Highlight transcript insights | Offline viewer, evidence notes, validated annotation import |
 | Hypothesis input and automatic prompt connections/edits | `hypotheses`, `map`, exact edits, optional API editor and prompt diff |
 | Ten-run baseline-rate-change 0–2 scoring | Per-run support labels, `score`, rates and intervals |
-| Rank, pair, confirm and iterate | `pair`, conflict revision, `approve-round`, all-strong/revision stop states |
+| Rank, synthesize, confirm and iterate | `pair`, jointly authored directions (local or via `--editor`), full-input review, `approve-round` |
 | Approximately 30-run exploratory tests | `pilot` plans with separate rate reports |
 | Predictions/counterfactuals; three independent changes | Registered validation arms and `validate` |
 | R1 conclusion comparison | Complete paper-claim judgments and calculated match percentage |

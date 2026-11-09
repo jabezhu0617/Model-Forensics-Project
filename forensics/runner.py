@@ -237,8 +237,10 @@ def rollout(study, experiment, index, client, sandbox, attempt=1):
     finally:
         run["finished"] = now()
         run["transcript_hash"] = digest(run["messages"])
-        study.put("runs", run_id, run)
-        sandbox.close()
+        try:
+            study.put("runs", run_id, run)
+        finally:
+            sandbox.close()
     return run
 
 

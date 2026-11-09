@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from forensics import workflow as w
 from forensics.demo import FixtureClient, FixtureSandbox, demo, fixture_batch
@@ -42,7 +42,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),
                          "986369c059854e5740722f4739bf1d7c837e67e8b401983ff94c6e81e0e16156")
         self.assertEqual(hashlib.sha256(path.with_name("Masterdoc-v2.md").read_bytes()).hexdigest(),
-                         "b8e66829b108fc7680ec3f5ea3366969b6658ff33eaa70e532854aa008cf346f")
+                         "edbd48ab92181d6024de47eaa66513807af4383d32e4efad91cd4f062727aa79")
 
     def test_prompt_edits_are_exact_and_leave_baseline_untouched(self):
         prompt = baseline()
@@ -65,6 +65,22 @@ class WorkflowTests(unittest.TestCase):
     def test_unapproved_runs_blocked(self):
         with self.assertRaises(ValueError):
             run_batch(self.study, "base", FixtureClient([]), FixtureSandbox)
+
+    def test_superseded_screen_is_not_reused_by_replacement(self):
+        old = self.plan("old", screen_group="H1")
+        self.run_fixture(self.base, 4)
+        self.run_fixture(old, 0)
+        self.study.config["superseded_experiments"] = {"old": "new"}
+        fresh = self.plan("new", screen_group="H1")
+        self.plan("positive", screen_group="H1", expectation={"direction": "increase"})
+        with self.assertRaisesRegex(ValueError, "superseded"):
+            w.score_experiment(self.study, "old")
+        self.run_fixture(fresh, 8)
+        result = w.score_experiment(self.study, "new")
+        self.assertEqual(result["arm_experiments"], {"decrease": "new", "increase": "positive"})
+        self.assertIsNone(result["score"])
+        self.assertEqual(result["arm_point"], 0)
+        self.assertEqual(len(self.study.runs("old")), 10)
 
     def test_editing_approved_design_invalidates_approval(self):
         w.approve(self.study, "base", "tester")
@@ -310,9 +326,43 @@ class WorkflowTests(unittest.TestCase):
             w.approve_round(self.study, "round1", "tester")
         with self.assertRaises(ValueError):
             self.plan("paired", hypothesis=record["pairs"][0])
-        w.revise_pair(self.study, record["pairs"][0], {"edits": [self.edit]})
+        pair_id = record["pairs"][0]
+        self.assertEqual(self.study.get("hypotheses", pair_id)["direction_edits"], {"decrease": [], "increase": []})
+        with self.assertRaisesRegex(ValueError, "joint hypothesis"):
+            w.revise_pair(self.study, pair_id, {"edits": [self.edit]})
+        joint = {"text": "Two motives jointly change the writer's decision to disclose.",
+                 "direction_edits": {"decrease": [self.edit],
+                                     "increase": [{**self.edit, "new": "I acted to protect others."}]}}
+        w.revise_pair(self.study, pair_id, joint)
         w.approve_round(self.study, "round1", "tester")
-        self.plan("paired", hypothesis=record["pairs"][0])
+        with self.assertRaisesRegex(ValueError, "approved joint draft"):
+            self.plan("substitution", hypothesis=pair_id, edits=[{**self.edit, "new": "Different wording."}])
+        self.plan("paired", hypothesis=pair_id)
+
+        # The editor must see the complete applied prompt, then repair a semantic issue.
+        def reply(value):
+            return {"choices": [{"message": {"content": json.dumps(value)}}]}
+        editor = Mock()
+        first_draft = {**joint, "direction_edits": {**joint["direction_edits"],
+                       "increase": [{**self.edit, "new": "An employee acted to protect others."}]}}
+        editor.complete.side_effect = [reply(first_draft), reply({"issues": ["The note gives the wrong author."]}),
+                                       reply(joint), reply({"issues": []})]
+        generated = w.pair(self.study, ["a", "b"], "edited-round", editor=editor)
+        self.assertFalse(generated["conflicts"])
+        self.assertIsNone(generated["approval"])
+        review = json.loads(editor.complete.call_args_list[1].args[0][1]["content"])
+        self.assertEqual(set(review["full_inputs"]["increase"]), {"system", "user", *self.base["prompt"]["files"]})
+        self.assertIn("An employee acted to protect others.", review["full_inputs"]["increase"]["notes_to_self.txt"])
+        repair = json.loads(editor.complete.call_args_list[2].args[0][1]["content"])
+        self.assertEqual(repair["issues_to_fix"], ["The note gives the wrong author."])
+        saved = self.study.get("hypotheses", generated["pairs"][0])
+        self.assertEqual(saved["direction_edits"], joint["direction_edits"])
+        issue = reply({"issues": ["The university gives the model's score to a student."]})
+        editor.complete.side_effect = [reply(first_draft), issue, reply(first_draft), issue]
+        flagged = w.pair(self.study, ["a", "b"], "incoherent-round", editor=editor)
+        self.assertEqual(flagged["conflicts"], flagged["pairs"])
+        with self.assertRaisesRegex(ValueError, "resolved conflicts"):
+            w.approve_round(self.study, flagged["id"], "tester")
 
     def test_all_strong_stops_pairing(self):
         self.run_fixture(self.base, 6)

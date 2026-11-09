@@ -1,4 +1,5 @@
 """One portable viewer containing the available studies and their experiments."""
+import base64
 import html
 import json
 import re
@@ -72,7 +73,7 @@ def combined_screen_entries(study, entries):
             if not hypothesis.get('direction_edits'):
                 continue
             key = hypothesis['id']
-            label = ' + '.join(sorted(hypothesis['parents']))
+            label = ' + '.join(sorted(hypothesis.get('components', hypothesis['parents'])))
             for direction, sign in [('decrease', '−'), ('increase', '+')]:
                 existing = planned.get((base['id'], key, sign))
                 if existing:
@@ -80,6 +81,8 @@ def combined_screen_entries(study, entries):
                     existing['round_id'] = record['id']
                     continue
                 try:
+                    if hypothesis.get('needs_revision'):
+                        raise ValueError(hypothesis['needs_revision'])
                     prompt = apply_edits(base['prompt'], hypothesis['direction_edits'][direction])
                     sections = ''.join(input_section(name, content, original[name])
                                        for name, content in targets(prompt).items())
@@ -109,7 +112,7 @@ def export_collection(study):
             studies.append(Study(config.parent))
     entries = []
     for source in studies:
-        for experiment in source.all('experiments'):
+        for experiment in source.active_experiments():
             if (experiment.get('synthetic', False)
                     or experiment.get('model') == 'v4-pro'
                     or experiment['id'] in {'r1-reason-screen', 'laptop-test', 'r1-eval-pilot'}
@@ -173,11 +176,23 @@ def export_collection(study):
         archive.writestr('START-HERE.txt', 'Extract the ZIP and open viewer.html in your browser.\nChoose an experiment, then Summary, Inputs, or Transcripts.\nThe HTML contains the exported pages and works offline.\nDownload annotations to transfer review drafts between computers.\n')
     with ZipFile(archive_path) as archive:
         assert archive.testzip() is None
+    publish_zip_bytes(archive_path)
     return {'viewer': str(output), 'zip': str(archive_path), 'experiments': len(entries),
             'recorded_slots': sum(entry['runs'] for entry in entries)}
 
 
+def publish_zip_bytes(archive):
+    """Make the finished ZIP readable by an offline file:// viewer on a save click."""
+    target = archive.with_name('viewer-zip-data.js')
+    temp = target.with_suffix('.tmp')
+    encoded = base64.b64encode(archive.read_bytes()).decode('ascii')
+    temp.write_text('window.viewerZipBase64="' + encoded + '";', encoding='ascii')
+    temp.replace(target)
+
+
 def render_viewer(entries):
-    template = (Path(__file__).with_name('assets') / 'collection-viewer.html').read_text(encoding='utf-8')
+    assets = Path(__file__).with_name('assets')
+    template = (assets / 'collection-viewer.html').read_text(encoding='utf-8')
+    template = template.replace('__SAVE_ZIP_SCRIPT__', (assets / 'save-viewer-zip.js').read_text(encoding='utf-8'))
     payload = json.dumps(entries, ensure_ascii=False).replace('&', '\\u0026').replace('<', '\\u003c')
     return template.replace('__STYLES__', viewer_styles()).replace('__DATA__', payload)

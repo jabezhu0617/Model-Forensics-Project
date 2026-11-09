@@ -4,6 +4,7 @@ import contextlib
 import json
 import os
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,7 +26,15 @@ def write(path, data):
     temp = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
     try:
         temp.write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-        os.replace(temp, path)
+        # On Windows a reader can briefly hold the destination without delete sharing.
+        for delay in (0.01, 0.03, 0.1, 0.3, 1, None):
+            try:
+                os.replace(temp, path)
+                break
+            except PermissionError as error:
+                if delay is None or getattr(error, "winerror", None) not in (5, 32, 33):
+                    raise
+                time.sleep(delay)
     finally:
         temp.unlink(missing_ok=True)
 
@@ -90,6 +99,10 @@ class Study:
 
     def all(self, kind):
         return [read(path) for path in sorted((self.root / kind).glob("*.json"))]
+
+    def active_experiments(self):
+        superseded = self.config.get("superseded_experiments", {})
+        return [e for e in self.all("experiments") if e["id"] not in superseded]
 
     def runs(self, experiment):
         latest = {}

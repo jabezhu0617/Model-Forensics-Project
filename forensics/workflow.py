@@ -8,6 +8,7 @@ import random
 from .prompts import apply_edits, digest, diff, propose, validate_bundle
 from .scoring import compare, conclusion_behavior, rate, screen, screen_group
 from .storage import DEFAULTS, identifier, now, read, write
+from .synthesis import R1_GUIDANCE, checked_directions, synthesize
 
 
 def configure(study, patch):
@@ -125,14 +126,18 @@ def plan(study, spec, editor=None):
                 raise ValueError("Paired screening requires ten trials per direction")
             group = identifier(spec.get("screen_group", hypothesis["id"]))
             result["screen_group"] = group
-            for other in study.all("experiments"):
+            for other in study.active_experiments():
                 if (screen_group(other) == group and other["baseline"] == base["id"]
                         and other["expectation"]["direction"] == expectation["direction"]):
                     raise ValueError(f"{group} already has a screen in that direction")
         proposal = propose(base["prompt"], edit_spec, editor)
+        if kind == "screen" and hypothesis.get("source_experiments"):
+            reviewed = hypothesis.get("direction_edits", {hypothesis["expectation"]["direction"]: hypothesis["edits"]})
+            if expectation["direction"] not in reviewed or proposal["prompt"] != apply_edits(base["prompt"], reviewed[expectation["direction"]]):
+                raise ValueError("Screen inputs differ from the approved joint draft")
         result.update(proposal, baseline=base["id"], hypothesis=hypothesis["id"], expectation=expectation)
         if kind == "validation":
-            screens = [e for e in study.all("experiments") if e["kind"] == "screen"
+            screens = [e for e in study.active_experiments() if e["kind"] == "screen"
                        and e.get("hypothesis") == hypothesis["id"] and e.get("baseline") == base["id"]]
             confirmed = []
             for candidate in screens:
@@ -225,6 +230,9 @@ def _experiment_result(study, experiment):
 
 
 def score_experiment(study, experiment_id):
+    replacement = study.config.get("superseded_experiments", {}).get(experiment_id)
+    if replacement:
+        raise ValueError(f"{experiment_id} was superseded by {replacement}; its archived score is not current")
     experiment = study.get("experiments", experiment_id)
     result = _experiment_result(study, experiment)
     if experiment["kind"] == "baseline":
@@ -234,7 +242,7 @@ def score_experiment(study, experiment_id):
     if group:
         points = {"decrease": None, "increase": None}
         arms = {}
-        for candidate in study.all("experiments"):
+        for candidate in study.active_experiments():
             if (screen_group(candidate) != group or candidate["baseline"] != experiment["baseline"]
                     or candidate["model"] != experiment["model"]):
                 continue
@@ -319,7 +327,7 @@ def round_digest(record, study):
                    "hypotheses": [study.get("hypotheses", key) for key in record["pairs"]]})
 
 
-def pair(study, experiment_ids, round_id):
+def pair(study, experiment_ids, round_id, editor=None):
     identifier(round_id)
     if len(round_id) > 65 or study.path("rounds", round_id).exists():
         raise ValueError("Round ID must be new and at most 65 characters")
@@ -351,18 +359,13 @@ def pair(study, experiment_ids, round_id):
     for row in ranking:
         if row["score"] == 0:
             continue
-        if "arms" in row:
-            arms = {d: study.get("experiments", key) for d, key in row["arms"].items()}
-            parents = [study.get("hypotheses", e["hypothesis"]) for e in arms.values()]
-            parent = dict(study.get("hypotheses", arms["decrease"]["hypothesis"]))
-            parent.update(id=row["hypothesis"], direction_edits={d: e["edits"] for d, e in arms.items()},
-                          expectation=arms["decrease"]["expectation"], edits=arms["decrease"]["edits"])
-            if any(p["id"] != parent["id"] for p in parents):
-                parent["text"] = " / ".join(dict.fromkeys(p["text"] for p in parents))
-                parent["components"] = [parent["id"]]
-        else:
-            parent = dict(study.get("hypotheses", row["hypothesis"]))
-            parent["edits"] = study.get("experiments", row["experiment"])["edits"]
+        key = row["hypothesis"]
+        sources = row.get("arms")
+        exp = study.get("experiments", sources["decrease"] if sources else row["experiment"])
+        definition = study.get("hypotheses", exp["hypothesis"])
+        parent = {"id": key, "expectation": exp["expectation"],
+                  "components": definition["components"] if definition.get("parents") or key == definition["id"] else [key],
+                  "screens": sources or {exp["expectation"]["direction"]: exp["id"]}}
         candidates.append(parent)
     records, seen, conflicts = [], set(), []
     base = study.get("experiments", experiments[0]["baseline"])
@@ -372,30 +375,26 @@ def pair(study, experiment_ids, round_id):
             if components in seen or set(components) in (set(left["components"]), set(right["components"])):
                 continue
             seen.add(components)
-            edits = []
-            # Use the actual reviewed edits, including editor-generated interventions.
-            for parent in (left, right):
-                for edit in parent["edits"]:
-                    if edit not in edits:
-                        edits.append(edit)
             key = f"{round_id}-pair{len(records) + 1}"
-            record = {"id": key, "text": f"({left['text']}) AND ({right['text']})",
+            directions = list(left["screens"])
+            record = {"id": key, "text": "Joint hypothesis pending: " + " + ".join(components),
                       "parents": [left["id"], right["id"]], "components": list(components),
-                      "expectation": left["expectation"], "edits": edits, "round": round_id,
+                      "source_experiments": {p["id"]: p["screens"] for p in (left, right)},
+                      "expectation": left["expectation"], "edits": [], "round": round_id,
                       "source_model": experiments[0]["model"], "created": now()}
-            if "direction_edits" in left:
-                positive = []
-                for parent in (left, right):
-                    for edit in parent["direction_edits"]["increase"]:
-                        if edit not in positive:
-                            positive.append(edit)
-                record["direction_edits"] = {"decrease": edits, "increase": positive}
+            if len(directions) == 2:
+                record["direction_edits"] = {d: [] for d in directions}
+            if base["id"] == "r1-baseline":
+                record["drafting_notes"] = {c: R1_GUIDANCE[c] for c in components if c in R1_GUIDANCE}
             try:
-                apply_edits(base["prompt"], edits)
-                if "direction_edits" in record:
-                    apply_edits(base["prompt"], positive)
-                if left["expectation"] != right["expectation"]:
+                if left["expectation"] != right["expectation"] or set(directions) != set(right["screens"]):
                     raise ValueError("Parents have different predictions; supply a joint expectation")
+                if editor is None:
+                    raise ValueError("Write one joint hypothesis and develop each direction from the parent ideas. Review the complete inputs together.")
+                record["text"], authored = synthesize(editor, study, base, record, directions)
+                record["edits"] = authored[record["expectation"]["direction"]]
+                if len(directions) == 2:
+                    record["direction_edits"] = authored
             except ValueError as exc:
                 record["needs_revision"] = str(exc)
                 conflicts.append(key)
@@ -424,13 +423,23 @@ def revise_pair(study, hypothesis_id, patch):
     prompt = study.get("experiments", record["baseline"])["prompt"]
     if "direction_edits" in hypothesis:
         directions = hypothesis["direction_edits"]
-        if set(directions) != {"decrease", "increase"}:
+        expected = {"decrease", "increase"}
+        if not isinstance(directions, dict) or set(directions) != expected:
             raise ValueError("Supply edits for both screening directions")
         if "edits" in patch and "direction_edits" not in patch:
             directions["decrease"] = patch["edits"]
         hypothesis["edits"] = directions["decrease"]
-        apply_edits(prompt, directions["increase"])
-    apply_edits(prompt, hypothesis["edits"])
+    else:
+        directions = {hypothesis["expectation"]["direction"]: hypothesis["edits"]}
+        expected = {hypothesis["expectation"]["direction"]}
+    if hypothesis.get("source_experiments"):
+        statement = hypothesis["text"]
+        if not isinstance(statement, str) or not statement.strip() or statement.startswith("Joint hypothesis pending:"):
+            raise ValueError("Supply the joint hypothesis statement")
+        checked_directions(prompt, directions, expected)
+    else:
+        for edits in directions.values():
+            apply_edits(prompt, edits)
     hypothesis.pop("needs_revision", None)
     study.put("hypotheses", hypothesis_id, hypothesis)
     record["conflicts"] = [key for key in record["conflicts"] if key != hypothesis_id]
@@ -443,6 +452,18 @@ def approve_round(study, round_id, reviewer):
     record = study.get("rounds", round_id)
     if not reviewer.strip() or record["status"] != "pending_review" or record["conflicts"]:
         raise ValueError("A pending round with resolved conflicts and a reviewer is required")
+    for row in record["ranking"]:
+        if row.get("status") == "pending_rescreen":
+            if not all(study.get("experiments", key).get("approval") for key in row["arms"].values()):
+                raise ValueError(f"Finish the {row['hypothesis']} rescreen before approving its pairs")
+            result = score_experiment(study, row["experiment"])
+            if result["score"] is None:
+                raise ValueError(f"Finish the {row['hypothesis']} rescreen before approving its pairs")
+            if result["score"] == 0:
+                raise ValueError(f"{row['hypothesis']} is no longer eligible; rebuild the candidate round")
+            row.update(score=result["score"], arms=result["arm_experiments"])
+            del row["status"]
+    record["ranking"].sort(key=lambda row: (-row["score"], row["hypothesis"]))
     record["approval"] = {"reviewer": reviewer, "time": now()}
     record["approval_hash"] = round_digest(record, study)
     study.put("rounds", round_id, record)
