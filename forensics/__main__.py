@@ -48,6 +48,7 @@ def parser():
     c = commands.add_parser("pair", help="Rank screens and propose all nonzero hypothesis pairs")
     c.add_argument("round")
     c.add_argument("experiments", nargs="+")
+    c.add_argument("--component-count", type=int, help="Only draft combinations with this many distinct hypotheses")
     c.add_argument("--editor", choices=["r1", "v4-pro"], help="Use a configured API editor to write and review joint drafts")
     c = commands.add_parser("revise-pair", help="Resolve conflicts before confirming a synthesized round")
     c.add_argument("hypothesis")
@@ -127,7 +128,7 @@ def dispatch(args, study):
         return w.score_experiment(study, args.experiment)
     if command == "pair":
         editor = Client(study.config["models"][args.editor]) if args.editor else None
-        return w.pair(study, args.experiments, args.round, editor=editor)
+        return w.pair(study, args.experiments, args.round, editor=editor, component_count=args.component_count)
     if command == "revise-pair":
         return w.revise_pair(study, args.hypothesis, read(args.file))
     if command == "approve-round":

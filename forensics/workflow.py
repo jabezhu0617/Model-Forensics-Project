@@ -327,8 +327,10 @@ def round_digest(record, study):
                    "hypotheses": [study.get("hypotheses", key) for key in record["pairs"]]})
 
 
-def pair(study, experiment_ids, round_id, editor=None):
+def pair(study, experiment_ids, round_id, editor=None, *, component_count=None):
     identifier(round_id)
+    if component_count is not None and component_count < 2:
+        raise ValueError("Combined hypotheses need at least two components")
     if len(round_id) > 65 or study.path("rounds", round_id).exists():
         raise ValueError("Round ID must be new and at most 65 characters")
     experiments = [study.get("experiments", key) for key in experiment_ids]
@@ -372,6 +374,8 @@ def pair(study, experiment_ids, round_id, editor=None):
     if status != "all_strong":
         for left, right in itertools.combinations(candidates, 2):
             components = tuple(sorted(set(left["components"] + right["components"])))
+            if component_count is not None and len(components) != component_count:
+                continue
             if components in seen or set(components) in (set(left["components"]), set(right["components"])):
                 continue
             seen.add(components)

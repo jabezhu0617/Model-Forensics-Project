@@ -111,7 +111,10 @@ for (const entry of entries) {
         items.push({id:entry.id,label,entry}); used.add(entry.id);
     }
 }
-items.sort((a,b) => Number(!!a.roundId) - Number(!!b.roundId)
+function componentCount(item) {
+    return item.roundId || item.entry?.round_id ? (item.arms?.['−'].pair_label || item.entry?.pair_label || '').split(' + ').length : 1;
+}
+items.sort((a,b) => componentCount(a) - componentCount(b)
     || Number(!!a.arms) - Number(!!b.arms)
     || (a.arms && b.arms ? a.label.localeCompare(b.label,'en',{numeric:true}) : 0));
 let item, view, directions;
@@ -214,9 +217,11 @@ function showSummaries() {
         });
         content.append(node('p','Runs needed: H1 standalone rescreen (' + pending.join('; ') + '). The previous H1 results are retired.'));
     }
-    for (const [paired,heading] of [[false,'Standalone hypotheses'],[true,'Hypothesis pairs']]) {
-        const group = items.filter(i => (i.arms || i.entry?.arm) && Boolean(i.roundId || i.entry?.round_id) === paired);
-        if (!group.length) continue;
+    const hypothesisItems = items.filter(i => i.arms || i.entry?.arm);
+    for (const size of new Set(hypothesisItems.map(componentCount))) {
+        const paired = size > 1;
+        const heading = ['','Standalone hypotheses','Hypothesis pairs','Hypothesis triples'][size] || size + '-hypothesis combinations';
+        const group = hypothesisItems.filter(i => componentCount(i) === size);
         content.append(node('h3',heading,'summary-group'));
         if (paired && group.every(i => i.score != null)) {
             const scores = [2,1,0];
