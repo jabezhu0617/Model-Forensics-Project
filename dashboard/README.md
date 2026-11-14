@@ -2,7 +2,7 @@
 
 A public, results-first explorer for the study's hypotheses, initial inputs, and complete observable transcripts. The Vue/TypeScript front end is hosted on Cloudflare Pages. The transcript viewer is read-only; the existing Pages Functions and D1 annotation records are retained.
 
-The overview includes a grouped bar chart of concealment rates: baseline, then H0–H4 with separate negative and positive arms. It uses the recorded trial counts, a common 0–100% axis, and a dashed baseline reference. Bar labels show rates; hover or focus reveals exact counts, and selecting a bar opens its experiment. On small screens the chart scrolls horizontally.
+The overview uses a static Matplotlib chart: orange baseline, red negative arms, and green positive arms for H0–H4, on a 0–100% concealment axis. SVG and PNG exports and their source counts are committed in `src/assets/plots/`. Data verification checks those counts and the image hashes to catch stale or mismatched plots.
 
 ## Development
 
@@ -24,6 +24,20 @@ bun run dev:cloudflare
 ```
 
 Open the URL printed by Wrangler (normally `http://localhost:8788`). `bun run dev` is a front-end preview; use the Cloudflare preview above when testing shared annotations.
+
+## Regenerate the plot
+
+After updating the study data, regenerate the Matplotlib SVG and PNG before publishing:
+
+```sh
+bun run preprocess
+python3 -m venv .venv-plot
+.venv-plot/bin/python -m pip install -r scripts/requirements-plot.txt
+.venv-plot/bin/python scripts/plot-results.py
+bun run verify:data
+```
+
+Python is needed only to regenerate the committed images; normal site builds use the existing exports.
 
 ## Verification
 

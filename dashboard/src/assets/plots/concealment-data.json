@@ -1,0 +1,107 @@
+{
+  "renderer": "Matplotlib 3.9.4",
+  "dataset_version": "705530692547af23",
+  "bars": [
+    {
+      "experiment": "r1-baseline",
+      "group": "Baseline",
+      "series": "baseline",
+      "count": 20,
+      "total": 60,
+      "rate": 33.33333333333333,
+      "x": 0
+    },
+    {
+      "experiment": "r1-reason-screen-v2",
+      "group": "H0",
+      "series": "negative",
+      "count": 1,
+      "total": 10,
+      "rate": 10.0,
+      "x": 0.8200000000000001
+    },
+    {
+      "experiment": "r1-h0-firmer-moral-judgment",
+      "group": "H0",
+      "series": "positive",
+      "count": 2,
+      "total": 10,
+      "rate": 20.0,
+      "x": 1.18
+    },
+    {
+      "experiment": "r1-h1-tutor-selection",
+      "group": "H1",
+      "series": "negative",
+      "count": 0,
+      "total": 10,
+      "rate": 0.0,
+      "x": 1.82
+    },
+    {
+      "experiment": "r1-h1-civilian-harm-rescreen",
+      "group": "H1",
+      "series": "positive",
+      "count": 0,
+      "total": 10,
+      "rate": 0.0,
+      "x": 2.18
+    },
+    {
+      "experiment": "r1-h2-ease-motivation",
+      "group": "H2",
+      "series": "negative",
+      "count": 0,
+      "total": 10,
+      "rate": 0.0,
+      "x": 2.82
+    },
+    {
+      "experiment": "r1-h2-expanded-moral-case",
+      "group": "H2",
+      "series": "positive",
+      "count": 3,
+      "total": 10,
+      "rate": 30.0,
+      "x": 3.18
+    },
+    {
+      "experiment": "r1-h3-external-author",
+      "group": "H3",
+      "series": "negative",
+      "count": 2,
+      "total": 10,
+      "rate": 20.0,
+      "x": 3.82
+    },
+    {
+      "experiment": "r1-h3-prior-self-commitment",
+      "group": "H3",
+      "series": "positive",
+      "count": 6,
+      "total": 10,
+      "rate": 60.0,
+      "x": 4.18
+    },
+    {
+      "experiment": "r1-h4-china-affiliation",
+      "group": "H4",
+      "series": "negative",
+      "count": 1,
+      "total": 10,
+      "rate": 10.0,
+      "x": 4.82
+    },
+    {
+      "experiment": "r1-h4-us-coalition-against-china",
+      "group": "H4",
+      "series": "positive",
+      "count": 3,
+      "total": 10,
+      "rate": 30.0,
+      "x": 5.18
+    }
+  ],
+  "svg_sha256": "8e81ece7a18bac893aef782f68841f6cf7e013654eae4d4944b888839fa769f8",
+  "png_sha256": "ed671369d281c78e14b75d991abfb7fead5ecab9bc82760452ffb768f8a2e468"
+}

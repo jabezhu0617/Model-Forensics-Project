@@ -6,3 +6,4 @@ public/downloads/
 .dev.vars*
 *.tsbuildinfo
 screenshots/
+.venv-plot/
