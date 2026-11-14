@@ -22,8 +22,22 @@ async function assertReadOnlyTranscript(){
 }
 try{
   await visit('/#/','overview');assert(await page.locator('.comparisons tbody tr').count()===31,'Expected 31 hypotheses');
+  assert(JSON.stringify(await page.locator('.chart-group').evaluateAll(nodes=>nodes.map(n=>(n as HTMLElement).dataset.group)))===JSON.stringify(['Baseline','H0','H1','H2','H3','H4']),'Incorrect chart group order');
+  const bars=await page.locator('.result-bar').evaluateAll(nodes=>nodes.map(node=>({id:(node as HTMLElement).dataset.experiment,count:Number((node as HTMLElement).dataset.count),total:Number((node as HTMLElement).dataset.total),height:Number(node.querySelector('.bar-fill')?.getAttribute('height'))})));
+  assert(bars.length===11,'Expected one baseline bar and ten intervention bars');
+  for(const bar of bars){
+    const source=d.experiments.find(e=>e.id===bar.id);
+    assert(source&&source.round===0,'Chart included a combined hypothesis or an unknown experiment');
+    assert(bar.count===source.counts.concealed&&bar.total===source.runs.length,'Chart count or denominator differs from study data');
+    assert(Math.abs(bar.height-source.counts.concealed/source.runs.length*236)<.01,'Bar height differs from its concealment rate');
+  }
+  await page.locator('.result-bar[data-experiment="r1-h3-prior-self-commitment"]').click();
+  await page.waitForURL('**/#/experiment/r1-h3-prior-self-commitment');
+  await page.locator('.run-table tbody tr').first().waitFor();
+  assert(await page.locator('.run-table tbody tr').count()===10,'Chart link did not open its ten trial records');
+  await visit('/#/','overview-chart');
   await page.getByRole('button',{name:'Round 4',exact:true}).click();assert(await page.locator('.comparisons tbody tr').count()===1,'Round filtering failed');
-  await visit('/#/hypothesis/r1-combined-round4-pair1','hypothesis');assert(await page.locator('.arm-card').count()===2,'Missing paired arms');
+  await visit('/#/hypothesis/r1-combined-round4-pair1','hypothesis');await page.locator('.arm-card').first().waitFor();assert(await page.locator('.arm-card').count()===2,'Missing paired arms');
   await page.getByRole('link',{name:'Prompt comparison',exact:true}).click();assert(await page.locator('.input-column').count()===2,'Missing paired prompt inputs');await page.screenshot({path:resolve(out,'inputs.png')});
   await visit('/#/experiment/r1-baseline','baseline');assert(await page.locator('.run-table tbody tr').count()===60,'Missing baseline runs');
   await visit('/#/methods','methods');
@@ -59,7 +73,10 @@ try{
   await page.getByRole('searchbox',{name:'Find in transcript'}).fill('questions');assert((await page.locator('.message-card.matched').count())>0,'Transcript search failed');
   await page.screenshot({path:resolve(out,'transcript-search.png')});
   await visit('/#/run/r1-baseline-0001','review');await assertReadOnlyTranscript();
-  await page.setViewportSize({width:390,height:844});await visit('/#/','mobile-overview');await visit('/#/run/r1-baseline-0001','mobile-review');await assertReadOnlyTranscript();
+  await page.setViewportSize({width:390,height:844});await visit('/#/','mobile-overview');
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'Chart causes mobile page overflow');
+  const scrollArea=page.locator('.chart-scroll');await scrollArea.evaluate(el=>el.scrollLeft=el.scrollWidth);await page.screenshot({path:resolve(out,'mobile-chart-scrolled.png')});
+  await visit('/#/run/r1-baseline-0001','mobile-review');await assertReadOnlyTranscript();
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'Mobile page overflows horizontally');
   assert(!annotationRequests.length,'Viewer still requests shared annotations');
   assert(!errors.length,`Browser errors: ${errors.join('\n')}`);

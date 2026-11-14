@@ -2,6 +2,8 @@
 
 A public, results-first explorer for the study's hypotheses, initial inputs, and complete observable transcripts. The Vue/TypeScript front end is hosted on Cloudflare Pages. The transcript viewer is read-only; the existing Pages Functions and D1 annotation records are retained.
 
+The overview includes a grouped bar chart of concealment rates: baseline, then H0–H4 with separate negative and positive arms. It uses the recorded trial counts, a common 0–100% axis, and a dashed baseline reference. Bar labels show rates; hover or focus reveals exact counts, and selecting a bar opens its experiment. On small screens the chart scrolls horizontally.
+
 ## Development
 
 Requires Bun 1.4.4 and a recent Node.js version.
