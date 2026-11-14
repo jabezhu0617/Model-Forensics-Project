@@ -2,7 +2,7 @@
 
 ## Hosted research dashboard
 
-The `dashboard/` directory contains a Cloudflare Pages explorer with hypothesis comparisons, prompt inputs, complete public transcripts, and shared review annotations. See [the dashboard guide](dashboard/README.md) for local development, verification, deployment, and updating the site through GitHub. The original offline workflow below remains available.
+The `dashboard/` directory contains a Cloudflare Pages explorer with hypothesis comparisons, prompt inputs, complete public transcripts, and a Matplotlib results chart. The transcript viewer is read-only. See [the dashboard guide](dashboard/README.md) for local development, verification, deployment, and updating the site through GitHub. The original offline workflow below remains available.
 
 This project implements the evaluation-tampering workflow in [Masterdoc-v2.md](Masterdoc-v2.md). [Masterdoc.md](Masterdoc.md) records the original protocol.
 
