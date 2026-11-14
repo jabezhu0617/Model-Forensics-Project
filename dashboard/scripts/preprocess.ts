@@ -4,8 +4,9 @@ import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { load } from 'cheerio';
 import type { Counts, Dataset, Experiment, Hypothesis, Run, RunSummary } from '../src/types';
+import { exportTemporary } from './export-temporary';
 
-// Public viewer exports are the only transcript source. Never open studies/*/sealed.
+// Study runs come only from the public viewer. Never open studies/*/sealed.
 const root = resolve(import.meta.dir, '../..');
 const reports = resolve(root, 'studies/main/reports');
 const html = await readFile(resolve(reports, 'viewer.html'), 'utf8');
@@ -113,4 +114,5 @@ const dataset: Dataset={
 };
 await output(resolve(dataDir,'index.json'),dataset);
 await output(resolve(dataDir,'manifest.json'),{version,runs:manifest,worstRun:worst});
+await exportTemporary(dataDir, downloads);
 console.log(`Exported ${dataset.totalExperiments} experiments, ${dataset.hypotheses.length} hypotheses, ${dataset.totalRuns} complete transcripts. Largest run: ${worst.id} (${worst.bytes} bytes).`);

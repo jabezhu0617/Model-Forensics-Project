@@ -5,12 +5,19 @@ export interface RunSummary {
   selected: boolean; support: string; excerpt: string; messageCount: number;
 }
 export interface Segment { text: string; anchors: [number, number][]; label: string; kind: string }
-export interface Message { role: string; index: number; segments: Segment[]; exit_code?: number }
+export interface Message { role: string; index: number; segments: Segment[]; exit_code?: number; step?: number }
+export interface TemporarySource {
+  title: string; model: string; scenario: string; run: string; status: string;
+  sourceUrl: string; sourceRevision: string; downloadUrl: string;
+  bytes: number; steps: number; reasoningBlocks: number; toolCalls: number;
+}
+export interface TemporarySummary extends TemporarySource { id: string; messageCount: number }
 export interface Highlight { quote: string; note: string; start?: number; start_utf16?: number; source?: string }
 export interface Run extends RunSummary {
   experiment: string; text: string; display_messages: Message[];
   submission: Record<string,string> | null; annotation: { reviewer?: string; highlights?: Highlight[]; outcome?: Outcome };
   suggested_highlights: Highlight[]; reasoning_available: boolean;
+  temporary?: TemporarySource;
 }
 export interface InputSection { title: string; html: string }
 export interface Experiment {

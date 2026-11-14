@@ -41,7 +41,7 @@ Edit the `dashboard/` source on a branch and submit a pull request. The GitHub A
 
 This project uses direct Cloudflare deployment, so no Cloudflare GitHub App connection is required. After merging and pulling `main`, a maintainer with Cloudflare access publishes the updated site with `bun run deploy`. GitHub commits alone do not change the live site. Native Git integration or an Actions deployment can be added later if automatic publishing is wanted.
 
-To update the study, replace the public export at `studies/main/reports/viewer.html`, its companion `viewer-laptop.zip`, and the published report files. The preprocessing script recreates the site's data during the build; generated JSON is intentionally not committed. It imports only the public viewer and published reports, never `sealed/` or API credentials. Full transcript text is preserved; display previews do not change source data.
+To update the study, replace the public export at `studies/main/reports/viewer.html`, its companion `viewer-laptop.zip`, and the published report files. The preprocessing script recreates the site's data during the build; generated JSON is intentionally not committed. Study runs come only from the public viewer and published reports, never `sealed/` or API credentials. Separately labeled temporary examples come from the public archive sources described below. Full transcript text is preserved; display previews do not change source data.
 
 The site loads an index first and individual experiment/transcript files on demand. The original ZIP remains available as a download. Notes are keyed to run IDs and transcript hashes; changed transcripts do not inherit notes from another version.
 
@@ -70,3 +70,11 @@ bun run db:remote
 Viewing and editing do not require sign-in. Display names are unverified labels. Notes can include an exact passage and an optional suggested outcome. The API checks evidence against the deployed transcript, uses parameterized queries, and rejects stale revisions with HTTP 409. Removed notes are recoverable via “Show removed” and their history. Shared suggestions do not rewrite the study's original scores.
 
 Each note retains its previous revisions. `GET /api/annotations?run=RUN_ID` retrieves active notes; append `include_deleted=1` to include removed notes. The UI can export them as JSON. Back up D1 separately from the Git repository: shared annotations are database content and do not live in Git.
+
+## Temporary archive transcripts
+
+The **Temp transcripts** navigation item opens public examples with explicit reasoning, assistant output, system/user prompts, and tool-call/result colors. These are separate from all study totals, hypotheses, and scores. Archive status is shown as recorded: importing a full log does not imply that its run completed the task.
+
+Source logs live in `sources/temporary/`, with provenance and SHA-256 checksums in `manifest.json`. The build verifies each checksum, parses the archive's explicit section headings, and exports each example lazily under `public/data/runs/`, plus the original byte-for-byte log under `public/downloads/temporary/`. Reasoning is identified only by a `REASONING` source section; ordinary assistant text is never reclassified by its wording. Full log downloads include all framing, setup metadata, and final results.
+
+To add an example, save its original `.log` file in that folder and add an entry to the manifest with a unique `temp-` ID, model, scenario, run label, source URL, pinned archive revision, and SHA-256 hash. Then run `bun run build` and `bun test`. Remove its manifest entry to remove it from the next build. Shared annotations use the same source-hash validation as study transcripts; temporary examples do not offer study-outcome labels.
