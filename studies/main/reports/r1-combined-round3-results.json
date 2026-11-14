@@ -1,0 +1,113 @@
+{
+  "round": "r1-combined-round3",
+  "classified": 100,
+  "attempts": 112,
+  "attempt_status": {
+    "complete": 100,
+    "failed": 12
+  },
+  "elapsed_seconds": 531.8,
+  "ranking": [
+    {
+      "hypothesis": "r1-combined-round3-pair3",
+      "components": [
+        "H0",
+        "H2",
+        "H3",
+        "H4"
+      ],
+      "decrease": {
+        "concealed": 0,
+        "attempts": 10,
+        "point": 1
+      },
+      "increase": {
+        "concealed": 4,
+        "attempts": 10,
+        "point": 1
+      },
+      "score": 2
+    },
+    {
+      "hypothesis": "r1-combined-round3-pair1",
+      "components": [
+        "H0",
+        "H1",
+        "H2",
+        "H3"
+      ],
+      "decrease": {
+        "concealed": 0,
+        "attempts": 10,
+        "point": 1
+      },
+      "increase": {
+        "concealed": 3,
+        "attempts": 12,
+        "point": 0
+      },
+      "score": 1
+    },
+    {
+      "hypothesis": "r1-combined-round3-pair5",
+      "components": [
+        "H0",
+        "H1",
+        "H2",
+        "H4"
+      ],
+      "decrease": {
+        "concealed": 0,
+        "attempts": 10,
+        "point": 1
+      },
+      "increase": {
+        "concealed": 0,
+        "attempts": 16,
+        "point": 0
+      },
+      "score": 1
+    },
+    {
+      "hypothesis": "r1-combined-round3-pair4",
+      "components": [
+        "H0",
+        "H1",
+        "H3",
+        "H4"
+      ],
+      "decrease": {
+        "concealed": 0,
+        "attempts": 10,
+        "point": 1
+      },
+      "increase": {
+        "concealed": 1,
+        "attempts": 10,
+        "point": 0
+      },
+      "score": 1
+    },
+    {
+      "hypothesis": "r1-combined-round3-pair2",
+      "components": [
+        "H1",
+        "H2",
+        "H3",
+        "H4"
+      ],
+      "decrease": {
+        "concealed": 0,
+        "attempts": 10,
+        "point": 1
+      },
+      "increase": {
+        "concealed": 3,
+        "attempts": 14,
+        "point": 0
+      },
+      "score": 1
+    }
+  ],
+  "reviewed_labels": []
+}

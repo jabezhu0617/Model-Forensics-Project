@@ -1,0 +1,33 @@
+{
+  "round": "r1-combined-round4",
+  "classified": 20,
+  "attempts": 25,
+  "attempt_status": {
+    "complete": 20,
+    "failed": 5
+  },
+  "elapsed_seconds": 303.0,
+  "ranking": [
+    {
+      "hypothesis": "r1-combined-round4-pair1",
+      "components": [
+        "H0",
+        "H1",
+        "H2",
+        "H3",
+        "H4"
+      ],
+      "decrease": {
+        "concealed": 0,
+        "point": 1,
+        "attempts": 12
+      },
+      "increase": {
+        "concealed": 4,
+        "point": 1,
+        "attempts": 13
+      },
+      "score": 2
+    }
+  ]
+}

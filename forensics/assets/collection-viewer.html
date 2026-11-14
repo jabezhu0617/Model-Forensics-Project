@@ -30,6 +30,10 @@ iframe,#overview,#empty{min-height:0;flex:1;width:100%;border:0}
 .arm{border-top:2px solid var(--rule-strong);padding:16px 0 22px}
 .arm h3{margin:0}
 .summary-group{margin:26px 0 12px}
+.score-filters,.collection-links{display:flex;flex-wrap:wrap;gap:6px 12px}
+.score-filters a{padding:5px 12px;border:1px solid var(--rule);border-radius:var(--radius-control);text-decoration:none}
+.score-filters a[aria-current=page]{background:var(--selection);border-color:var(--rule-strong);font-weight:600}
+.collection-links a{white-space:nowrap}
 .hypothesis-row{border-top:1px solid var(--rule);padding:14px 0}
 .hypothesis-row header{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
 .hypothesis-row h4,.hypothesis-row p{margin:0}
@@ -198,38 +202,58 @@ function overview() {
     el('overview').replaceChildren(content);
 }
 function studyNavigation() {
-    el('studies').replaceChildren(button(summaryLabel,showSummaries,!item), ...items.map(i =>
+    el('studies').replaceChildren(button(summaryLabel,() => showSummaries(summaryFilter),!item), ...items.map(i =>
         button(i.label,() => { selectItem(i); show('summary'); },i === item)));
 }
-function showSummaries() {
+let summaryFilter = 'all';
+function showSummaries(filter='all') {
+    summaryFilter = filter;
     item = null;
     studyNavigation();
     el('views').replaceChildren();
     el('direction').hidden = true;
     el('empty').hidden = frame.hidden = true;
     const content = node('div',undefined,'reading');
-    content.append(node('h2',summaryLabel),node('p','The negative direction predicts less concealment and the positive direction predicts more, relative to baseline. Each direction can earn one point.'));
+    const hypotheses = items.filter(i => i.arms || i.entry?.arm);
+    const filters = node('nav',undefined,'score-filters');
+    filters.setAttribute('aria-label','Filter hypotheses by score');
+    content.append(node('h2',summaryLabel),filters);
+    let visible = hypotheses;
+    for (const value of ['all','2','1']) {
+        const matches = value === 'all' ? hypotheses : hypotheses.filter(i => i.score === Number(value));
+        const label = value === 'all' ? 'All' : value + '/2';
+        const link = node('a',label + ' (' + matches.length + ')');
+        link.href = '#' + summaryId + (value === 'all' ? '' : ':' + value);
+        if (filter === value) {
+            link.setAttribute('aria-current','page');
+            visible = matches;
+        }
+        filters.append(link);
+        if (filter === 'all' && value !== 'all' && matches.length) {
+            const links = node('div',undefined,'collection-links');
+            for (const hypothesis of matches) {
+                const detail = node('a',hypothesis.label);
+                detail.href = '#' + encodeURIComponent(hypothesis.id) + ':summary';
+                links.append(detail);
+            }
+            content.append(node('h3',label + ' hypotheses'),links);
+        }
+    }
+    content.append(node('p','The negative direction predicts less concealment and the positive direction predicts more, relative to baseline. Each direction can earn one point.'));
+    if (!visible.length) content.append(node('p','No hypotheses in this collection.'));
     const rerun = items.find(i => i.arms?.['−'].experiment === 'r1-h1-tutor-selection');
-    if (rerun && rerun.score == null) {
+    if (filter === 'all' && rerun && rerun.score == null) {
         const pending = ['−','+'].map(s => {
             const e = rerun.arms[s];
             return s + ': ' + e.arm.trials.filter(t => ['concealed','reported'].includes(t.outcome)).length + ' of ' + e.requested + ' classified';
         });
         content.append(node('p','Runs needed: H1 standalone rescreen (' + pending.join('; ') + '). The previous H1 results are retired.'));
     }
-    const hypothesisItems = items.filter(i => i.arms || i.entry?.arm);
-    for (const size of new Set(hypothesisItems.map(componentCount))) {
+    for (const size of new Set(visible.map(componentCount))) {
         const paired = size > 1;
         const heading = ['','Standalone hypotheses','Hypothesis pairs','Hypothesis triples'][size] || size + '-hypothesis combinations';
-        const group = hypothesisItems.filter(i => componentCount(i) === size);
+        const group = visible.filter(i => componentCount(i) === size);
         content.append(node('h3',heading,'summary-group'));
-        if (paired && group.every(i => i.score != null)) {
-            const scores = [2,1,0];
-            for (const score of scores) {
-                const matches = group.filter(i => i.score === score);
-                if (matches.length) content.append(node('p', score + '/2 · ' + matches.map(i => i.label).join(', ')));
-            }
-        }
         for (const hypothesis of group) {
             const row = node('section',undefined,'hypothesis-row'), header = node('header');
             const link = node('a',hypothesis.label + (topics[hypothesis.label] ? ' · ' + topics[hypothesis.label] : ''));
@@ -254,7 +278,7 @@ function showSummaries() {
     el('overview').replaceChildren(content);
     el('overview').hidden = false;
     el('overview').scrollTop = 0;
-    history.replaceState(null,'','#' + summaryId);
+    history.replaceState(null,'','#' + summaryId + (filter === 'all' ? '' : ':' + filter));
 }
 function show(requested) {
     const primary = item.arms ? ['summary','inputs','transcripts'] : Object.keys(item.entry.pages);
@@ -309,7 +333,7 @@ function restore() {
     const [encoded,tab,side] = location.hash.slice(1).split(':');
     let id;
     try { id = decodeURIComponent(encoded || ''); } catch { id = ''; }
-    if (!id || id === summaryId) return showSummaries();
+    if (!id || id === summaryId) return showSummaries(['2','1'].includes(tab) ? tab : 'all');
     const selected = items.find(i => i.id === id || (i.arms && Object.values(i.arms).some(e => e.id === id)))
         || items.find(i => i.roundId && i.study + '/rounds/' + i.roundId === id);
     if (!selected) return showSummaries();

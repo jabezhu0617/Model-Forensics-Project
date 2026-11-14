@@ -4,6 +4,12 @@ This project implements the evaluation-tampering workflow in [Masterdoc-v2.md](M
 
 The new code is in `forensics/`. The original `model_forensics_paper/` and the uninitialized submodule placeholders are preserved. Python 3.11+ runs the workflow without third-party Python dependencies. Live rollouts additionally need Docker with Linux containers and model API credentials.
 
+## Open the study viewer
+
+[Download the offline viewer ZIP](studies/main/reports/viewer-laptop.zip?raw=true), extract it, and open `viewer.html` in a browser. The viewer includes hypothesis scores, experiment inputs, and transcripts through Round 4. The ZIP also contains the hypothesis summary, all four round reports, and the Round 4 proposals.
+
+If you cloned the repository, open [viewer.html](studies/main/reports/viewer.html) directly from your checkout. Keep it alongside `viewer-laptop.zip` and `viewer-zip-data.js` to use **Save viewer ZIP** offline.
+
 ## Try the offline workflow
 
 From this project directory in PowerShell:
