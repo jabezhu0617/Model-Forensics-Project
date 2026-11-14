@@ -1,6 +1,6 @@
 # Model Forensics dashboard
 
-A public, results-first explorer for the study's hypotheses, initial inputs, and complete observable transcripts. The Vue/TypeScript front end is hosted on Cloudflare Pages; Pages Functions and D1 store anonymous, shared annotations.
+A public, results-first explorer for the study's hypotheses, initial inputs, and complete observable transcripts. The Vue/TypeScript front end is hosted on Cloudflare Pages. The transcript viewer is read-only; the existing Pages Functions and D1 annotation records are retained.
 
 ## Development
 
@@ -13,7 +13,7 @@ bun run preprocess
 bun run dev
 ```
 
-For the full application with shared annotations:
+To run the retained annotation API alongside the application:
 
 ```sh
 bun run build
@@ -33,7 +33,7 @@ bun run verify:data
 bun run test:browser
 ```
 
-The data verification compares every transcript's full text, hash, displayed messages, final submission, and outcome with the original viewer export. Browser checks include the largest transcript, evidence selection, two independent browser sessions, and mobile layouts. `scripts/smoke.ts` uses Chrome on macOS; adjust its executable path for other systems.
+The data verification compares every transcript's full text, hash, displayed messages, final submission, and outcome with the original viewer export. Browser checks include the largest transcript, search and expansion, full-width desktop/mobile layouts, and the absence of note controls or annotation polling. `scripts/smoke.ts` uses Chrome on macOS; adjust its executable path for other systems.
 
 ## Update the dashboard through GitHub
 
@@ -43,7 +43,7 @@ This project uses direct Cloudflare deployment, so no Cloudflare GitHub App conn
 
 To update the study, replace the public export at `studies/main/reports/viewer.html`, its companion `viewer-laptop.zip`, and the published report files. The preprocessing script recreates the site's data during the build; generated JSON is intentionally not committed. Study runs come only from the public viewer and published reports, never `sealed/` or API credentials. Separately labeled temporary examples come from the public archive sources described below. Full transcript text is preserved; display previews do not change source data.
 
-The site loads an index first and individual experiment/transcript files on demand. The original ZIP remains available as a download. Notes are keyed to run IDs and transcript hashes; changed transcripts do not inherit notes from another version.
+The site loads an index first and individual experiment/transcript files on demand. The original ZIP remains available as a download. Existing annotation records remain keyed to run IDs and transcript hashes.
 
 ## Cloudflare configuration
 
@@ -65,11 +65,11 @@ Apply schema changes before deploying code that depends on them:
 bun run db:remote
 ```
 
-## Shared annotations
+## Retained annotation data
 
-Viewing and editing do not require sign-in. Display names are unverified labels. Notes can include an exact passage and an optional suggested outcome. The API checks evidence against the deployed transcript, uses parameterized queries, and rejects stale revisions with HTTP 409. Removed notes are recoverable via “Show removed” and their history. Shared suggestions do not rewrite the study's original scores.
+The viewer no longer displays shared notes, add-note buttons, or selection-to-annotation controls, and it does not poll the annotation API. Existing notes and their history remain in D1; removing the interface does not delete those records. The server API, migrations, and API tests are retained.
 
-Each note retains its previous revisions. `GET /api/annotations?run=RUN_ID` retrieves active notes; append `include_deleted=1` to include removed notes. The UI can export them as JSON. Back up D1 separately from the Git repository: shared annotations are database content and do not live in Git.
+Back up D1 separately from the Git repository. Existing records can be retrieved with `GET /api/annotations?run=RUN_ID`; append `include_deleted=1` to include removed records.
 
 ## Temporary archive transcripts
 
@@ -77,4 +77,4 @@ The **Temp transcripts** navigation item opens public examples with explicit rea
 
 Source logs live in `sources/temporary/`, with provenance and SHA-256 checksums in `manifest.json`. The build verifies each checksum, parses the archive's explicit section headings, and exports each example lazily under `public/data/runs/`, plus the original byte-for-byte log under `public/downloads/temporary/`. Reasoning is identified only by a `REASONING` source section; ordinary assistant text is never reclassified by its wording. Full log downloads include all framing, setup metadata, and final results.
 
-To add an example, save its original `.log` file in that folder and add an entry to the manifest with a unique `temp-` ID, model, scenario, run label, source URL, pinned archive revision, and SHA-256 hash. Then run `bun run build` and `bun test`. Remove its manifest entry to remove it from the next build. Shared annotations use the same source-hash validation as study transcripts; temporary examples do not offer study-outcome labels.
+To add an example, save its original `.log` file in that folder and add an entry to the manifest with a unique `temp-` ID, model, scenario, run label, source URL, pinned archive revision, and SHA-256 hash. Then run `bun run build` and `bun test`. Remove its manifest entry to remove it from the next build.
