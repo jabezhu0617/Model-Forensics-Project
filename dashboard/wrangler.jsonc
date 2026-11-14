@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "model-forensics-vncntt",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-11-13",
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "model-forensics-annotations",
+    "database_id": "0ebb6ccf-4a88-4a8c-9f99-dad854df34f0",
+    "migrations_dir": "migrations"
+  }]
+}

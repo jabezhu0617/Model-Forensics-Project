@@ -1,0 +1,23 @@
+name: Dashboard checks
+on:
+  push:
+    paths: ['dashboard/**', 'studies/main/reports/**', 'hypotheses.md', '.github/workflows/dashboard.yml']
+  pull_request:
+    paths: ['dashboard/**', 'studies/main/reports/**', 'hypotheses.md', '.github/workflows/dashboard.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+      - run: bun install --frozen-lockfile
+      - run: bun test
+      - run: bun run build
+      - run: bun run verify:data

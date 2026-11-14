@@ -1,0 +1,11 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import { experiment, percent } from '../data';
+import type { Experiment } from '../types';
+import RunsTable from '../components/RunsTable.vue';
+import InputsPanel from '../components/InputsPanel.vue';
+const route=useRoute(),data=ref<Experiment|null>(null),error=ref('');const tab=computed(()=>String(route.query.tab??'runs'));
+watch(()=>route.params.id,async id=>{try{data.value=await experiment(String(id));}catch(e){error.value=String(e);}},{immediate:true});
+</script>
+<template><div v-if="error" class="notice error">{{error}}</div><template v-else-if="data"><RouterLink :to="data.group?`/hypothesis/${data.group}`:'/'" class="back-link">← {{data.group?'Hypothesis comparison':'Results overview'}}</RouterLink><div class="page-heading"><div><p class="eyebrow">{{data.sign?'EXPERIMENTAL ARM':'ORIGINAL BASELINE'}} · DEEPSEEK R1</p><h1>{{data.sign?`${data.label} · ${data.sign} intervention`:'Baseline study'}}</h1><p class="lead">{{data.sign?data.title:'Sixty independent trials establish the reference concealment rate.'}}</p></div><a :href="`/downloads/${data.id}-summary.html`" target="_blank" rel="noopener" class="button secondary">Original report ↗</a></div><div class="stat-grid three"><div class="stat"><span>Concealment rate</span><strong>{{percent(data.counts.concealed,data.runs.length)}}</strong><small>{{data.counts.concealed}} concealed of {{data.runs.length}} classified trials</small></div><div class="stat"><span>Reported observations</span><strong>{{data.counts.reported}}</strong><small>Trials labeled reported in the export</small></div><div class="stat"><span>{{data.sign?'Attempts recorded':'Confidence interval'}}</span><strong>{{data.sign?data.attempts:'22.7–45.9%'}}</strong><small>{{data.sign?'Includes retried slots':'95% Wilson interval · baseline only'}}</small></div></div><nav class="view-tabs"><RouterLink :to="{query:{tab:'runs'}}" :class="{selected:tab==='runs'}">Transcripts</RouterLink><RouterLink :to="{query:{tab:'inputs'}}" :class="{selected:tab==='inputs'}">Initial inputs</RouterLink></nav><InputsPanel v-if="tab==='inputs'" :experiments="[data]"/><RunsTable v-else :experiments="[data]"/></template></template>

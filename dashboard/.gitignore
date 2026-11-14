@@ -1,0 +1,8 @@
+node_modules/
+dist/
+public/data/
+public/downloads/
+.wrangler/
+.dev.vars*
+*.tsbuildinfo
+screenshots/
