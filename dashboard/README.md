@@ -2,7 +2,7 @@
 
 A public, results-first explorer for the study's hypotheses, initial inputs, and complete observable transcripts. The Vue/TypeScript front end is hosted on Cloudflare Pages. The transcript viewer is read-only; the existing Pages Functions and D1 annotation records are retained.
 
-The overview uses a static Matplotlib chart: orange baseline, red negative arms, and green positive arms for H0–H4, on a 0–100% concealment axis. SVG and PNG exports and their source counts are committed in `src/assets/plots/`. Data verification checks those counts and the image hashes to catch stale or mismatched plots.
+The overview uses a static Matplotlib chart: orange baseline, red negative arms, and green positive arms for H0–H4, on a 0–100% concealment axis. The baseline error bar shows the source report's retry-inclusive 95% Wilson confidence interval (22.7–45.9%). H0–H4 have no reported intervals, so their bars have no error bars. SVG and PNG exports and their source counts and intervals are committed in `src/assets/plots/`. Data verification checks those values and the image hashes to catch stale or mismatched plots.
 
 ## Development
 

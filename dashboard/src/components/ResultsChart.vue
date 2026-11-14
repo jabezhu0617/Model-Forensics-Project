@@ -2,7 +2,7 @@
 import chartUrl from '../assets/plots/concealment.svg';
 import chartData from '../assets/plots/concealment-data.json';
 import { percent } from '../data';
-const description = 'Concealment rate. ' + chartData.bars.map(bar => `${bar.group}${bar.series==='baseline'?'':` ${bar.series}`}: ${percent(bar.count,bar.total)} (${bar.count} of ${bar.total} trials)`).join('; ');
+const description = 'Concealment rate. ' + chartData.bars.map(bar => `${bar.group}${bar.series==='baseline'?'':` ${bar.series}`}: ${percent(bar.count,bar.total)} (${bar.count} of ${bar.total} trials)${bar.interval95?`, 95% ${bar.interval95.method} confidence interval ${(bar.interval95.lower*100).toFixed(1)}–${(bar.interval95.upper*100).toFixed(1)}%`:''}`).join('; ') + '. Error bars are shown only where reported in the source.';
 </script>
 
 <template>

@@ -9,7 +9,12 @@
       "count": 20,
       "total": 60,
       "rate": 33.33333333333333,
-      "x": 0
+      "x": 0,
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.22729261523522676,
+        "upper": 0.459431335478803
+      }
     },
     {
       "experiment": "r1-reason-screen-v2",
@@ -18,7 +23,8 @@
       "count": 1,
       "total": 10,
       "rate": 10.0,
-      "x": 0.8200000000000001
+      "x": 0.8200000000000001,
+      "interval95": null
     },
     {
       "experiment": "r1-h0-firmer-moral-judgment",
@@ -27,7 +33,8 @@
       "count": 2,
       "total": 10,
       "rate": 20.0,
-      "x": 1.18
+      "x": 1.18,
+      "interval95": null
     },
     {
       "experiment": "r1-h1-tutor-selection",
@@ -36,7 +43,8 @@
       "count": 0,
       "total": 10,
       "rate": 0.0,
-      "x": 1.82
+      "x": 1.82,
+      "interval95": null
     },
     {
       "experiment": "r1-h1-civilian-harm-rescreen",
@@ -45,7 +53,8 @@
       "count": 0,
       "total": 10,
       "rate": 0.0,
-      "x": 2.18
+      "x": 2.18,
+      "interval95": null
     },
     {
       "experiment": "r1-h2-ease-motivation",
@@ -54,7 +63,8 @@
       "count": 0,
       "total": 10,
       "rate": 0.0,
-      "x": 2.82
+      "x": 2.82,
+      "interval95": null
     },
     {
       "experiment": "r1-h2-expanded-moral-case",
@@ -63,7 +73,8 @@
       "count": 3,
       "total": 10,
       "rate": 30.0,
-      "x": 3.18
+      "x": 3.18,
+      "interval95": null
     },
     {
       "experiment": "r1-h3-external-author",
@@ -72,7 +83,8 @@
       "count": 2,
       "total": 10,
       "rate": 20.0,
-      "x": 3.82
+      "x": 3.82,
+      "interval95": null
     },
     {
       "experiment": "r1-h3-prior-self-commitment",
@@ -81,7 +93,8 @@
       "count": 6,
       "total": 10,
       "rate": 60.0,
-      "x": 4.18
+      "x": 4.18,
+      "interval95": null
     },
     {
       "experiment": "r1-h4-china-affiliation",
@@ -90,7 +103,8 @@
       "count": 1,
       "total": 10,
       "rate": 10.0,
-      "x": 4.82
+      "x": 4.82,
+      "interval95": null
     },
     {
       "experiment": "r1-h4-us-coalition-against-china",
@@ -99,9 +113,10 @@
       "count": 3,
       "total": 10,
       "rate": 30.0,
-      "x": 5.18
+      "x": 5.18,
+      "interval95": null
     }
   ],
-  "svg_sha256": "8e81ece7a18bac893aef782f68841f6cf7e013654eae4d4944b888839fa769f8",
-  "png_sha256": "ed671369d281c78e14b75d991abfb7fead5ecab9bc82760452ffb768f8a2e468"
+  "svg_sha256": "07a4bb6baac4187a8435288b2236a8684dc224b2ce9bd0e0b678ce34754b3f91",
+  "png_sha256": "3ac2146f1b22309a999764e10b83922807e10e0aed67f5a0ad5cdf2adaf4eaae"
 }

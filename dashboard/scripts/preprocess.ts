@@ -65,6 +65,16 @@ for (const entry of entries) {
     runs:runSummaries, requested:entry.requested, counts:experimentCounts,
     attempts:entry.arm?.attempt_count??records.length,
   };
+  if (entry.experiment === 'r1-baseline') {
+    // Use the source report's unrounded, retry-inclusive interval.
+    const $stats=load(entry.pages.statistics??'');
+    const style=$stats('.axis[aria-label="Latest attempt per slot, point estimate and 95 percent Wilson interval"] .interval').attr('style')??'';
+    const lower=Number(style.match(/left:([\d.]+)%/)?.[1])/100;
+    const width=Number(style.match(/width:([\d.]+)%/)?.[1])/100;
+    const upper=lower+width;
+    if(!Number.isFinite(lower)||!Number.isFinite(upper)||lower<0||upper>1||lower>upper)throw new Error('Missing or invalid reported baseline confidence interval');
+    experiment.interval95={method:'Wilson',lower,upper};
+  }
   const $input=load(entry.pages.inputs??'');
   const inputs=$input('main section').toArray().map(section=>{
     const $section=$input(section).clone();

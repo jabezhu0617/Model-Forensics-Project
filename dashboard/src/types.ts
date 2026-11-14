@@ -24,6 +24,7 @@ export interface Experiment {
   id: string; label: string; group: string | null; round: number; sign: '−' | '+' | null;
   title: string; score: number | null; point: number | null; runs: RunSummary[];
   requested: number; counts: Counts; attempts: number; inputs?: InputSection[];
+  interval95?: { method: 'Wilson'; lower: number; upper: number };
 }
 export interface Hypothesis { id: string; label: string; title: string; round: number; score: number | null; arms: string[] }
 export interface Report { id: string; title: string; content: string }

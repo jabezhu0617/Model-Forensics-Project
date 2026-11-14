@@ -24,7 +24,8 @@ def main() -> None:
         if total == 0:
             raise ValueError(f"No recorded trials for {experiment['id']}")
         bars.append(dict(experiment=experiment["id"], group=group, series=series,
-                         count=count, total=total, rate=count / total * 100, x=x))
+                         count=count, total=total, rate=count / total * 100, x=x,
+                         interval95=experiment.get("interval95")))
 
     add(experiments["r1-baseline"], "Baseline", "baseline", 0)
     for i in range(5):
@@ -58,8 +59,18 @@ def main() -> None:
             rectangle = ax.bar(item["x"], item["rate"], width=.30,
                                color=colors[item["series"]], linewidth=0)[0]
             rectangle.set_gid(f"bar-{item['group']}-{item['series']}")
+            label_y = item["rate"]
+            if item["interval95"] is not None:
+                interval = item["interval95"]
+                lower, upper = interval["lower"] * 100, interval["upper"] * 100
+                error = ax.errorbar(item["x"], item["rate"],
+                                    yerr=[[item["rate"] - lower], [upper - item["rate"]]],
+                                    fmt="none", ecolor="#404040", elinewidth=1,
+                                    capsize=4, capthick=1, zorder=3)
+                error.lines[2][0].set_gid(f"errorbar-{item['group']}-{item['series']}")
+                label_y = upper
             label = f"{item['rate']:.1f}".rstrip("0").rstrip(".") if item["rate"] % 1 else str(int(item["rate"]))
-            ax.annotate(f"{label}%", (item["x"], item["rate"]),
+            ax.annotate(f"{label}%", (item["x"], label_y),
                         xytext=(0, 4), textcoords="offset points",
                         ha="center", va="bottom", fontsize=10)
         ax.set_ylabel("Concealment rate", labelpad=10)
@@ -70,6 +81,9 @@ def main() -> None:
         ax.yaxis.set_major_formatter(PercentFormatter(100, decimals=0))
         ax.tick_params(axis="x", length=0, pad=9)
         ax.tick_params(axis="y", length=3, width=.7, pad=6)
+        ax.text(0, 1.035, "Error bar: 95% Wilson CI (baseline only)",
+                transform=ax.transAxes, ha="left", va="bottom",
+                fontsize=8.5, color="#606060")
         ax.legend(handles=[Patch(facecolor=colors[key], label=label) for key, label in
                            [("baseline", "Baseline"), ("negative", "Negative"), ("positive", "Positive")]],
                   frameon=False, ncol=3, loc="lower right", bbox_to_anchor=(1, 1.015),
