@@ -1,0 +1,2 @@
+# Preserve generated image bytes and ignore renderer whitespace.
+*.svg -text -whitespace

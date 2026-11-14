@@ -1,0 +1,13 @@
+[
+  {
+    "id": "temp-kimi-precommit-100",
+    "file": "kimi-precommit-100.log",
+    "title": "Pre-commit hook",
+    "model": "Kimi K2 Thinking",
+    "scenario": "precommit_hook",
+    "run": "Run 100",
+    "sourceUrl": "https://huggingface.co/datasets/Model-Forensics/model-forensics/blob/main/precommit_hook/moonshotai-kimi-k2-thinking/2026-03-24_20-33-32-814747/run-100/rollout.log",
+    "sourceRevision": "e9aa97a7aac835b56b67e28746429d57730b3bdb",
+    "sha256": "4e5c6c7ec569b1f65db1a0da05333602d0225cd75ffff0ce084eac5807366eb2"
+  }
+]
