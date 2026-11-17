@@ -1,9 +1,9 @@
 name: Dashboard checks
 on:
   push:
-    paths: ['dashboard/**', 'studies/main/reports/**', 'hypotheses.md', '.github/workflows/dashboard.yml']
+    paths: ['dashboard/**', 'studies/main/reports/**', 'hypotheses.md', 'archive/**', 'research-focus.json', '.github/workflows/dashboard.yml']
   pull_request:
-    paths: ['dashboard/**', 'studies/main/reports/**', 'hypotheses.md', '.github/workflows/dashboard.yml']
+    paths: ['dashboard/**', 'studies/main/reports/**', 'hypotheses.md', 'archive/**', 'research-focus.json', '.github/workflows/dashboard.yml']
 permissions:
   contents: read
 jobs:
@@ -18,6 +18,6 @@ jobs:
         with:
           bun-version: '1.4.4'
       - run: bun install --frozen-lockfile
-      - run: bun test
       - run: bun run build
+      - run: bun test
       - run: bun run verify:data

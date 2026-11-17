@@ -2,7 +2,15 @@
 
 A public, results-first explorer for the study's hypotheses, initial inputs, and complete observable transcripts. The Vue/TypeScript front end is hosted on Cloudflare Pages. The transcript viewer is read-only; the existing Pages Functions and D1 annotation records are retained.
 
-The overview uses a static Matplotlib chart: orange baseline, red negative arms, and green positive arms for H0–H4, on a 0–100% concealment axis. The baseline error bar shows the source report's retry-inclusive 95% Wilson confidence interval (22.7–45.9%). H0–H4 have no reported intervals, so their bars have no error bars. SVG and PNG exports and their source counts and intervals are committed in `src/assets/plots/`. Data verification checks those values and the image hashes to catch stale or mismatched plots.
+The overview uses a static Matplotlib chart: orange baseline, red negative arms, and green positive arms for H0–H4, on a 0–100% concealment axis. Every bar has a two-sided 95% Wilson confidence interval. The baseline remains 20/60 (22.7–45.9%). Once the fixed follow-up is finalized, each H0–H4 rate pools the original ten slots and twenty additional slots with the identical frozen prompt and model settings. Original ten-trial screening scores remain unchanged and are labeled separately from the pooled rate estimates. SVG and PNG exports and their source counts, intervals and experiment IDs are committed in `src/assets/plots/`. Data verification checks those values and the image hashes to catch stale or mismatched plots.
+
+The November 17 follow-up is run from the project root with `python scripts/run_hypothesis_followup.py run --workers 100`. It creates ten separate approved twenty-slot pilot experiments, preserves completed slots and retry history, and reports each completed arm. After all 200 additional slots are completed and classified, `python scripts/finalize_hypothesis_followup.py` verifies source hashes, adds the public transcripts and results report to the offline viewer and ZIP, and preserves the historical exports. Then regenerate the dashboard data and chart as described below. The importer rejects partial follow-up publication, duplicate slots and unresolved outcomes. Raw source batches remain separately accessible; hypothesis pages show all thirty trials per direction.
+
+## Current focus and combination archive
+
+The main viewer covers only the baseline and H0–H4: 360 trials, including the 60-trial baseline and 30 trials per hypothesis direction. Its report selector and results download use the same scope. The dotted horizontal graph line marks the 33.3% baseline. `research-focus.json` at the project root records the active research scope.
+
+The separate `/#/combinations` page preserves all 26 combinations and 520 trials, with round filters, original scores, prompts and transcripts. Archive reports are under `/#/methods?scope=archive`; combination notes live in project-root `archive/`. Original experiment/run IDs and evidence hashes are preserved. The full historical ZIP remains available from the archive. The two JSON downloads (`baseline-h0-h4-results.json` and `combination-archive-results.json`) contain disjoint source batches.
 
 ## Development
 
@@ -42,8 +50,8 @@ Python is needed only to regenerate the committed images; normal site builds use
 ## Verification
 
 ```sh
-bun test
 bun run build
+bun test
 bun run verify:data
 # With the local Cloudflare preview running, and Chrome installed:
 bun run test:browser
@@ -55,13 +63,15 @@ The data verification compares every transcript's full text, hash, displayed mes
 
 Edit the `dashboard/` source on a branch and submit a pull request. The GitHub Actions workflow checks types, tests the annotation API, builds the site, and verifies imported data. Configure branch protection in GitHub if checks should be required before merging.
 
-This project uses direct Cloudflare deployment, so no Cloudflare GitHub App connection is required. After merging and pulling `main`, a maintainer with Cloudflare access publishes the updated site with `bun run deploy`. GitHub commits alone do not change the live site. Native Git integration or an Actions deployment can be added later if automatic publishing is wanted.
+This project uses direct Cloudflare deployment, so no Cloudflare GitHub App connection is required. The user-owned copy is configured in `personal-hosting.json`: `model-forensics-jabezhu0617` in account `c861f74b01dff55e0c5dde46159bc3e3`, production branch `main`. After signing in with `bunx wrangler login`, run `bun run deploy` to build, verify, and publish the current read-only viewer. The deploy script stages only public assets in an isolated directory, with no Functions or D1 binding. Each release is recorded in the ignored project-root `build/personal-deployment.json`.
+
+GitHub commits alone do not change the live site. Native Git integration or an Actions deployment can be added later if automatic publishing is wanted. The original `model-forensics-vncntt` project remains separately configured in `wrangler.jsonc` and uses `bun run deploy:original` with its owner's Cloudflare access. Its database and annotation API are not part of the user-owned static copy.
 
 To update the study, replace the public export at `studies/main/reports/viewer.html`, its companion `viewer-laptop.zip`, and the published report files. The preprocessing script recreates the site's data during the build; generated JSON is intentionally not committed. Study runs come only from the public viewer and published reports, never `sealed/` or API credentials. Separately labeled temporary examples come from the public archive sources described below. Full transcript text is preserved; display previews do not change source data.
 
 The site loads an index first and individual experiment/transcript files on demand. The original ZIP remains available as a download. Existing annotation records remain keyed to run IDs and transcript hashes.
 
-## Cloudflare configuration
+## Original Cloudflare configuration
 
 - Project: `model-forensics-vncntt`
 - Production branch: `main`
@@ -71,7 +81,7 @@ The site loads an index first and individual experiment/transcript files on dema
 - Build environment: `BUN_VERSION=1.4.4`, `NODE_VERSION=24`
 - D1 binding: `DB` → `model-forensics-annotations`
 
-The root directory, build command, and output settings above also describe the configuration to use if Git integration is enabled later. They are handled locally by `bun run deploy` for the current direct-upload deployment.
+The root directory, build command, and output settings above also describe the configuration to use if Git integration is enabled later. They are handled locally by `bun run deploy:original` for the original direct-upload deployment.
 
 The database ID in `wrangler.jsonc` is configuration, not a secret. OAuth/API credentials belong in the local Cloudflare login or hosting settings and must not be committed.
 

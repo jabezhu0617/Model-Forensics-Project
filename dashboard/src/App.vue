@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { dataset } from './data';
+import { studyScope } from './study-scope';
 import type { Dataset } from './types';
 const data=ref<Dataset|null>(null),error=ref('');
+const focusedTrials=computed(()=>data.value?studyScope(data.value).focus.totalRuns:'…');
 onMounted(async()=>{try{data.value=await dataset();}catch(e){error.value=String(e);}});
 </script>
 <template>
@@ -13,8 +15,9 @@ onMounted(async()=>{try{data.value=await dataset();}catch(e){error.value=String(
         <RouterLink to="/experiment/r1-baseline" :class="{active:$route.path.includes('r1-baseline')}"><span>◷</span> Baseline study</RouterLink>
         <RouterLink to="/examples" :class="{active:$route.path.startsWith('/examples')}"><span>≋</span> Temp transcripts</RouterLink>
         <RouterLink to="/methods" :class="{active:$route.path==='/methods'}"><span>≡</span> Methods & exports</RouterLink>
+        <RouterLink to="/combinations" class="archive-link" :class="{active:$route.path==='/combinations'}"><span>▤</span> Combination archive</RouterLink>
       </nav>
-      <div class="sidebar-study"><p class="eyebrow">THIS STUDY</p><strong>Evaluation tampering</strong><p>DeepSeek R1 · 4 rounds</p><span class="live-dot"></span> {{data?.totalRuns??'…'}} recorded trials</div>
+      <div class="sidebar-study"><p class="eyebrow">CURRENT FOCUS</p><strong>Baseline + H0–H4</strong><p>DeepSeek R1 · five hypotheses</p><span class="live-dot"></span> {{focusedTrials}} trials in focus</div>
     </aside>
     <div class="main-shell">
       <main id="main-content" class="content">

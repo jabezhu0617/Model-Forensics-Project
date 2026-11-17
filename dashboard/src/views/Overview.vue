@@ -1,19 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { dataset, percent, roundNames } from '../data';
-import type { Dataset, Hypothesis } from '../types';
-import RateBar from '../components/RateBar.vue';
+import { dataset, percent } from '../data';
+import { studyScope } from '../study-scope';
+import type { Dataset } from '../types';
 import ResultsChart from '../components/ResultsChart.vue';
-const data=ref<Dataset|null>(null),stage=ref(-1),query=ref(''),strongOnly=ref(false);
+import HypothesisComparisons from '../components/HypothesisComparisons.vue';
+const data=ref<Dataset|null>(null);
 onMounted(async()=>{data.value=await dataset();});
+const focus=computed(()=>data.value?studyScope(data.value).focus:null);
 const baseline=computed(()=>data.value?.experiments.find(e=>e.id==='r1-baseline'));
-const hypotheses=computed(()=>data.value?.hypotheses.filter(h=>(stage.value<0||h.round===stage.value)&&(!strongOnly.value||h.score===2)&&`${h.label} ${h.title}`.toLowerCase().includes(query.value.toLowerCase()))??[]);
-const arm=(h:Hypothesis,sign:string)=>data.value?.experiments.find(e=>h.arms.includes(e.id)&&e.sign===sign);
 </script>
-<template><template v-if="data">
-  <div class="page-heading"><div><p class="eyebrow">EVALUATION TAMPERING · DEEPSEEK R1</p><h1>What changes concealment?</h1><p class="lead">Reverse-engineering model behavior through prompt interventions.<br class="desktop-only"> Explore the evidence, compare hypotheses, and review the transcripts.</p></div><a href="/downloads/viewer-laptop.zip" class="button secondary" download>↓ Download study</a></div>
-  <div class="stat-grid"><div class="stat"><span>Baseline concealment</span><strong>{{baseline?percent(baseline.counts.concealed,baseline.runs.length):'—'}}</strong><small>20 of 60 trials · 95% CI 22.7–45.9%</small></div><div class="stat"><span>Recorded trials</span><strong>{{data.totalRuns}}</strong><small>Across {{data.totalExperiments}} experimental arms</small></div><div class="stat"><span>Hypotheses tested</span><strong>{{data.hypotheses.length}}</strong><small>Individuals through five-part combinations</small></div><div class="stat"><span>Both directions supported</span><strong>{{data.hypotheses.filter(h=>h.score===2).length}}<em>/ {{data.hypotheses.length}}</em></strong><small>Exploratory screening score of 2/2</small></div></div>
+<template><template v-if="data&&focus">
+  <div class="page-heading"><div><p class="eyebrow">EVALUATION TAMPERING · DEEPSEEK R1</p><h1>What changes concealment?</h1><p class="lead">Focus on the baseline and H0–H4, tested in both directions.<br class="desktop-only"> Compare both directions and review the evidence.</p></div><a href="/downloads/baseline-h0-h4-results.json" class="button secondary" download>↓ Download results</a></div>
+  <div class="stat-grid">
+    <div class="stat"><span>Baseline concealment</span><strong>{{baseline?percent(baseline.counts.concealed,baseline.runs.length):'—'}}</strong><small>20 of 60 trials · 95% CI 22.7–45.9%</small></div>
+    <div class="stat"><span>Trials in focus</span><strong>{{focus.totalRuns}}</strong><small>60 baseline + 300 hypothesis trials</small></div>
+    <div class="stat"><span>Base hypotheses</span><strong>{{focus.hypotheses.length}}</strong><small>30 trials in each positive and negative direction</small></div>
+    <div class="stat"><span>Original screens scoring 2/2</span><strong>{{focus.hypotheses.filter(h=>h.score===2).length}}<em>/ {{focus.hypotheses.length}}</em></strong><small>Scores from the first ten trials per direction</small></div>
+  </div>
   <ResultsChart/>
-  <section class="panel comparison-panel"><div class="panel-heading"><div><h2>Hypothesis comparisons</h2><p>Concealment rates for each intervention. The dashed marker is the 33.3% baseline.</p></div><span class="muted">{{hypotheses.length}} hypotheses</span></div><div class="stage-tabs"><button @click="stage=-1" :class="{selected:stage===-1}">All rounds</button><button v-for="(name,i) in roundNames" :key="name" @click="stage=i" :class="{selected:stage===i}">{{i===0?'Individual':`Round ${i}`}}</button></div><div class="table-toolbar"><input class="search" type="search" v-model="query" aria-label="Search hypotheses" placeholder="Search hypotheses or mechanisms…"><label class="check-label"><input type="checkbox" v-model="strongOnly"> Show 2/2 only</label></div><div class="table-scroll"><table class="data-table comparisons"><thead><tr><th>Hypothesis</th><th>− Lower direction</th><th>+ Higher direction</th><th>Screening score</th><th></th></tr></thead><tbody><tr v-for="h in hypotheses" :key="h.id"><td><RouterLink :to="`/hypothesis/${h.id}`" class="hypothesis-label">{{h.label}}</RouterLink><p class="hypothesis-description">{{h.title}}</p><span class="round-label">{{roundNames[h.round]}}</span></td><td><RateBar :count="arm(h,'−')?.counts.concealed??0" :total="arm(h,'−')?.runs.length??0" direction="−"/></td><td><RateBar :count="arm(h,'+')?.counts.concealed??0" :total="arm(h,'+')?.runs.length??0" direction="+"/></td><td><span :class="['score-badge',{strong:h.score===2}]">{{h.score??'—'}} / 2</span><small class="score-caption">{{h.score===2?'Both supported':'One supported'}}</small></td><td><RouterLink :to="`/hypothesis/${h.id}`" :aria-label="`Open ${h.label}`">→</RouterLink></td></tr><tr v-if="!hypotheses.length"><td colspan="5" class="empty-state">No hypotheses match these filters.</td></tr></tbody></table></div></section>
-  <div class="method-note"><span>ⓘ</span><p><strong>Read these as screening results.</strong> Each intervention has ten classified trials. A 2/2 score means both directions crossed the registered count threshold; it does not establish a causal explanation or statistical significance. <RouterLink to="/methods">Read the protocol →</RouterLink></p></div>
+  <HypothesisComparisons :data="data" :hypotheses="focus.hypotheses"/>
+  <div class="method-note"><span>ⓘ</span><p><strong>Current focus: baseline and H0–H4.</strong> Rates pool the original 10 trials and 20 follow-up trials per direction. The original ten-trial screening scores are preserved. These exploratory results do not establish a causal explanation or statistical significance. <RouterLink to="/methods">Read the protocol →</RouterLink></p></div>
 </template></template>

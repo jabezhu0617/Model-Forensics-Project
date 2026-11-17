@@ -1,6 +1,6 @@
 {
   "renderer": "Matplotlib 3.9.4",
-  "dataset_version": "705530692547af23",
+  "dataset_version": "bf5adf7ea894e6e1",
   "bars": [
     {
       "experiment": "r1-baseline",
@@ -14,109 +14,197 @@
         "method": "Wilson",
         "lower": 0.22729261523522676,
         "upper": 0.459431335478803
-      }
+      },
+      "sources": [
+        "r1-baseline"
+      ]
     },
     {
       "experiment": "r1-reason-screen-v2",
       "group": "H0",
       "series": "negative",
-      "count": 1,
-      "total": 10,
+      "count": 3,
+      "total": 30,
       "rate": 10.0,
       "x": 0.8200000000000001,
-      "interval95": null
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.03459988874733419,
+        "upper": 0.25621082579184085
+      },
+      "sources": [
+        "r1-reason-screen-v2",
+        "r1-h0-h4-followup-20261117-h0-decrease"
+      ]
     },
     {
       "experiment": "r1-h0-firmer-moral-judgment",
       "group": "H0",
       "series": "positive",
-      "count": 2,
-      "total": 10,
-      "rate": 20.0,
+      "count": 7,
+      "total": 30,
+      "rate": 23.333333333333332,
       "x": 1.18,
-      "interval95": null
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.11792388144489496,
+        "upper": 0.40928326158122164
+      },
+      "sources": [
+        "r1-h0-firmer-moral-judgment",
+        "r1-h0-h4-followup-20261117-h0-increase"
+      ]
     },
     {
       "experiment": "r1-h1-tutor-selection",
       "group": "H1",
       "series": "negative",
       "count": 0,
-      "total": 10,
+      "total": 30,
       "rate": 0.0,
       "x": 1.82,
-      "interval95": null
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0,
+        "upper": 0.11351339317396876
+      },
+      "sources": [
+        "r1-h1-tutor-selection",
+        "r1-h0-h4-followup-20261117-h1-decrease"
+      ]
     },
     {
       "experiment": "r1-h1-civilian-harm-rescreen",
       "group": "H1",
       "series": "positive",
-      "count": 0,
-      "total": 10,
-      "rate": 0.0,
+      "count": 7,
+      "total": 30,
+      "rate": 23.333333333333332,
       "x": 2.18,
-      "interval95": null
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.11792388144489496,
+        "upper": 0.40928326158122164
+      },
+      "sources": [
+        "r1-h1-civilian-harm-rescreen",
+        "r1-h0-h4-followup-20261117-h1-increase"
+      ]
     },
     {
       "experiment": "r1-h2-ease-motivation",
       "group": "H2",
       "series": "negative",
       "count": 0,
-      "total": 10,
+      "total": 30,
       "rate": 0.0,
       "x": 2.82,
-      "interval95": null
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0,
+        "upper": 0.11351339317396876
+      },
+      "sources": [
+        "r1-h2-ease-motivation",
+        "r1-h0-h4-followup-20261117-h2-decrease"
+      ]
     },
     {
       "experiment": "r1-h2-expanded-moral-case",
       "group": "H2",
       "series": "positive",
-      "count": 3,
-      "total": 10,
-      "rate": 30.0,
+      "count": 6,
+      "total": 30,
+      "rate": 20.0,
       "x": 3.18,
-      "interval95": null
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.0950510717728987,
+        "upper": 0.3730569641314825
+      },
+      "sources": [
+        "r1-h2-expanded-moral-case",
+        "r1-h0-h4-followup-20261117-h2-increase"
+      ]
     },
     {
       "experiment": "r1-h3-external-author",
       "group": "H3",
       "series": "negative",
-      "count": 2,
-      "total": 10,
-      "rate": 20.0,
+      "count": 4,
+      "total": 30,
+      "rate": 13.333333333333334,
       "x": 3.82,
-      "interval95": null
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.053096554840547455,
+        "upper": 0.296813266820363
+      },
+      "sources": [
+        "r1-h3-external-author",
+        "r1-h0-h4-followup-20261117-h3-decrease"
+      ]
     },
     {
       "experiment": "r1-h3-prior-self-commitment",
       "group": "H3",
       "series": "positive",
-      "count": 6,
-      "total": 10,
-      "rate": 60.0,
+      "count": 19,
+      "total": 30,
+      "rate": 63.33333333333333,
       "x": 4.18,
-      "interval95": null
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.4551356365479487,
+        "upper": 0.7812607919389929
+      },
+      "sources": [
+        "r1-h3-prior-self-commitment",
+        "r1-h0-h4-followup-20261117-h3-increase"
+      ]
     },
     {
       "experiment": "r1-h4-china-affiliation",
       "group": "H4",
       "series": "negative",
-      "count": 1,
-      "total": 10,
-      "rate": 10.0,
+      "count": 11,
+      "total": 30,
+      "rate": 36.666666666666664,
       "x": 4.82,
-      "interval95": null
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.21873920806100708,
+        "upper": 0.5448643634520511
+      },
+      "sources": [
+        "r1-h4-china-affiliation",
+        "r1-h0-h4-followup-20261117-h4-decrease"
+      ]
     },
     {
       "experiment": "r1-h4-us-coalition-against-china",
       "group": "H4",
       "series": "positive",
-      "count": 3,
-      "total": 10,
-      "rate": 30.0,
+      "count": 6,
+      "total": 30,
+      "rate": 20.0,
       "x": 5.18,
-      "interval95": null
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.0950510717728987,
+        "upper": 0.3730569641314825
+      },
+      "sources": [
+        "r1-h4-us-coalition-against-china",
+        "r1-h0-h4-followup-20261117-h4-increase"
+      ]
     }
   ],
-  "svg_sha256": "07a4bb6baac4187a8435288b2236a8684dc224b2ce9bd0e0b678ce34754b3f91",
-  "png_sha256": "3ac2146f1b22309a999764e10b83922807e10e0aed67f5a0ad5cdf2adaf4eaae"
+  "baseline_reference": {
+    "experiment": "r1-baseline",
+    "rate": 33.33333333333333,
+    "style": "dotted"
+  },
+  "svg_sha256": "10fa66803c911747c78063d069de357c6285c057b405b04312a5fde26142890e",
+  "png_sha256": "8abbce0bef7b53aad4f9afc5922dd8738b2165a38301b90a4965855c9fb30305"
 }

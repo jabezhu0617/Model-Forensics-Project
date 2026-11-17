@@ -40,3 +40,5 @@
 @media(max-width:650px){.temporary-card{padding:20px;align-items:flex-start;flex-direction:column}.archive-context{font-size:11px}.archive-context a{margin-left:0}.message-text,.message-preview{font-size:11px}.kind-key{font-size:9px}.transcript-legend{gap:6px 11px}.message-card{scroll-margin-top:180px}}
 
 .transcript-layout{min-width:0;width:100%}
+.primary-nav a.archive-link{color:#737b87}
+.primary-nav a.archive-link.active{background:#eef0f3;color:#4a5565}

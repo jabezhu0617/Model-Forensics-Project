@@ -2,6 +2,7 @@ import { createApp } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import App from './App.vue';
 import Overview from './views/Overview.vue';
+import Combinations from './views/Combinations.vue';
 import HypothesisView from './views/HypothesisView.vue';
 import ExperimentView from './views/ExperimentView.vue';
 import RunView from './views/RunView.vue';
@@ -10,6 +11,7 @@ import TemporaryView from './views/TemporaryView.vue';
 import './style.css';
 const router=createRouter({history:createWebHashHistory(),routes:[
   {path:'/',component:Overview},
+  {path:'/combinations',component:Combinations},
   {path:'/hypothesis/:id',component:HypothesisView},
   {path:'/experiment/:id',component:ExperimentView},
   {path:'/run/:id',component:RunView},

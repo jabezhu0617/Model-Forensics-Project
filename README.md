@@ -1,5 +1,11 @@
 # Behavior-first model forensics
 
+## Current research focus
+
+Current work covers the frozen R1 baseline and the five standalone hypotheses H0–H4: 60 baseline trials and 30 trials per positive/negative hypothesis arm, for 360 trials in focus. `research-focus.json` records this scope. Keep future work on these five hypotheses unless the user requests a change.
+
+The 26 historical combinations and their 520 trials are preserved in the [combination archive](archive/README.md) and the online viewer’s separate **Combination archive** page. They are excluded from the main overview, active reports and focus-results download. The graph’s dotted horizontal line marks the 33.3% baseline; all bars retain their 95% Wilson intervals.
+
 ## Hosted research dashboard
 
 The `dashboard/` directory contains a Cloudflare Pages explorer with hypothesis comparisons, prompt inputs, complete public transcripts, and a Matplotlib results chart. The transcript viewer is read-only. See [the dashboard guide](dashboard/README.md) for local development, verification, deployment, and updating the site through GitHub. The original offline workflow below remains available.

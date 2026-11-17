@@ -1,0 +1,6 @@
+{
+  "baseline": "r1-baseline",
+  "hypotheses": ["H0", "H1", "H2", "H3", "H4"],
+  "combinationArchive": "archive/combination-hypotheses.md",
+  "policy": "Focus ongoing research on the baseline and H0-H4. Keep combination experiments as historical evidence; do not resume combination work unless explicitly requested."
+}

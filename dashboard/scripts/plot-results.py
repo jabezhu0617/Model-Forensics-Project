@@ -15,17 +15,20 @@ def main() -> None:
     parser.add_argument("--input", type=Path, default=root / "public/data/index.json")
     parser.add_argument("--output-dir", type=Path, default=root / "src/assets/plots")
     args = parser.parse_args()
-    dataset = json.loads(args.input.read_text())
+    dataset = json.loads(args.input.read_text(encoding="utf8"))
     experiments = {item["id"]: item for item in dataset["experiments"]}
     bars = []
 
     def add(experiment: dict, group: str, series: str, x: float) -> None:
-        count, total = experiment["counts"]["concealed"], len(experiment["runs"])
+        pooled = experiment.get("pooled")
+        count = (pooled or experiment)["counts"]["concealed"]
+        total = pooled["total"] if pooled else len(experiment["runs"])
         if total == 0:
             raise ValueError(f"No recorded trials for {experiment['id']}")
         bars.append(dict(experiment=experiment["id"], group=group, series=series,
                          count=count, total=total, rate=count / total * 100, x=x,
-                         interval95=experiment.get("interval95")))
+                         interval95=(pooled or experiment).get("interval95"),
+                         sources=pooled["sources"] if pooled else [experiment["id"]]))
 
     add(experiments["r1-baseline"], "Baseline", "baseline", 0)
     for i in range(5):
@@ -55,6 +58,9 @@ def main() -> None:
             "xtick.color": "#404040", "ytick.color": "#404040",
         })
         fig, ax = plt.subplots(figsize=(9.5, 4.25), layout="constrained")
+        baseline_reference = dict(experiment="r1-baseline", rate=bars[0]["rate"], style="dotted")
+        reference = ax.axhline(baseline_reference["rate"], color="#666666", linestyle=":", linewidth=1.2, zorder=2)
+        reference.set_gid("baseline-reference")
         for item in bars:
             rectangle = ax.bar(item["x"], item["rate"], width=.30,
                                color=colors[item["series"]], linewidth=0)[0]
@@ -72,7 +78,8 @@ def main() -> None:
             label = f"{item['rate']:.1f}".rstrip("0").rstrip(".") if item["rate"] % 1 else str(int(item["rate"]))
             ax.annotate(f"{label}%", (item["x"], label_y),
                         xytext=(0, 4), textcoords="offset points",
-                        ha="center", va="bottom", fontsize=10)
+                        ha="center", va="bottom", fontsize=10,
+                        bbox=dict(facecolor="white", edgecolor="none", pad=.2), zorder=4)
         ax.set_ylabel("Concealment rate", labelpad=10)
         ax.set_xticks(range(6), ["Baseline", "H0", "H1", "H2", "H3", "H4"])
         ax.set_xlim(-.55, 5.6)
@@ -81,13 +88,15 @@ def main() -> None:
         ax.yaxis.set_major_formatter(PercentFormatter(100, decimals=0))
         ax.tick_params(axis="x", length=0, pad=9)
         ax.tick_params(axis="y", length=3, width=.7, pad=6)
-        ax.text(0, 1.035, "Error bar: 95% Wilson CI (baseline only)",
+        ax.text(0, 1.035, "Error bars: 95% Wilson confidence intervals",
                 transform=ax.transAxes, ha="left", va="bottom",
                 fontsize=8.5, color="#606060")
         ax.legend(handles=[Patch(facecolor=colors[key], label=label) for key, label in
                            [("baseline", "Baseline"), ("negative", "Negative"), ("positive", "Positive")]],
                   frameon=False, ncol=3, loc="lower right", bbox_to_anchor=(1, 1.015),
                   handlelength=1.1, handletextpad=.5, columnspacing=1.6, fontsize=10)
+        if any(experiment.get("pooled") for experiment in experiments.values()):
+            fig.supxlabel("Baseline: 60 trials · H0–H4: 30 trials per direction (10 original + 20 follow-up)", fontsize=8.5, color="#606060")
         args.output_dir.mkdir(parents=True, exist_ok=True)
         svg = args.output_dir / "concealment.svg"
         png = args.output_dir / "concealment.png"
@@ -95,9 +104,10 @@ def main() -> None:
         fig.savefig(png, dpi=220)
         plt.close(fig)
         metadata = dict(renderer=f"Matplotlib {matplotlib.__version__}", dataset_version=dataset["version"],
-                        bars=bars, svg_sha256=hashlib.sha256(svg.read_bytes()).hexdigest(),
+                        bars=bars, baseline_reference=baseline_reference,
+                        svg_sha256=hashlib.sha256(svg.read_bytes()).hexdigest(),
                         png_sha256=hashlib.sha256(png.read_bytes()).hexdigest())
-        (args.output_dir / "concealment-data.json").write_text(json.dumps(metadata, indent=2) + "\n")
+        (args.output_dir / "concealment-data.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf8")
         print(f"Rendered {len(bars)} bars with {metadata['renderer']}: {svg} and {png}")
 
 

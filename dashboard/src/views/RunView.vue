@@ -6,9 +6,9 @@ import type { Message, Run, Segment } from '../types';
 import { kindLabel, messageKind, segmentKind, transcriptKinds } from '../transcript';
 import OutcomeBadge from '../components/OutcomeBadge.vue';
 const route=useRoute(),router=useRouter(),run=ref<Run|null>(null),error=ref(''),query=ref(''),activeHit=ref(0),onlyMatches=ref(false),expanded=ref(new Set<string>());
-const nearby=ref<{id:string;outcome:string}[]>([]);
+const nearby=ref<{id:string;outcome:string}[]>([]),archived=ref(false);
 let generation=0;
-watch(()=>route.params.id,async id=>{const version=++generation;try{run.value=null;expanded.value=new Set();query.value='';onlyMatches.value=false;error.value='';const item=await loadRun(String(id));if(version!==generation)return;run.value=item;nearby.value=item.temporary?(await temporaryTranscripts()).map(t=>({id:t.id,outcome:'unresolved'})):(await dataset()).experiments.find(e=>e.id===item.experiment)?.runs??[];if(version!==generation)return;await nextTick();const anchor=Number(route.query.message);if(Number.isInteger(anchor)&&anchor>=0)document.getElementById(`message-${anchor}`)?.scrollIntoView();}catch(e){if(version===generation)error.value=String(e);}},{immediate:true});
+watch(()=>route.params.id,async id=>{const version=++generation;try{run.value=null;expanded.value=new Set();query.value='';onlyMatches.value=false;error.value='';const item=await loadRun(String(id));if(version!==generation)return;run.value=item;const study=item.temporary?null:await dataset();if(version!==generation)return;const source=study?.experiments.find(e=>e.id===item.experiment);archived.value=(source?.round??0)>0;nearby.value=item.temporary?(await temporaryTranscripts()).map(t=>({id:t.id,outcome:'unresolved'})):source?.runs??[];if(version!==generation)return;await nextTick();const anchor=Number(route.query.message);if(Number.isInteger(anchor)&&anchor>=0)document.getElementById(`message-${anchor}`)?.scrollIntoView();}catch(e){if(version===generation)error.value=String(e);}},{immediate:true});
 const matches=computed(()=>query.value.length>=2?run.value?.display_messages.filter(m=>m.segments.some(s=>s.text.toLowerCase().includes(query.value.toLowerCase()))).map(m=>m.index)??[]:[]);
 const visible=computed(()=>run.value?.display_messages.filter(m=>!onlyMatches.value||query.value.length<2||matches.value.includes(m.index))??[]);
 const runIndex=computed(()=>nearby.value.findIndex(r=>r.id===run.value?.id));
@@ -36,7 +36,7 @@ function messageLabel(message:Message){return message.segments.some(s=>s.kind===
   <div v-if="error" class="notice error" role="alert">{{error}}</div>
   <template v-else-if="run">
     <RouterLink :to="run.temporary?'/examples':`/experiment/${run.experiment}`" class="back-link">← {{run.temporary?'Temporary transcripts':'Experiment transcripts'}}</RouterLink>
-    <div class="page-heading compact">
+    <p v-if="archived" class="helper">Archived combination transcript · <RouterLink to="/combinations">Combination archive</RouterLink></p><div class="page-heading compact">
       <div>
         <p class="eyebrow">{{run.temporary?`${run.temporary.model} · ${run.temporary.run}`:'TRANSCRIPT REVIEW · DEEPSEEK R1'}}</p>
         <h1 v-if="run.temporary">{{run.temporary.title}}</h1>

@@ -3,8 +3,10 @@ import { readFile, writeFile, mkdir, rm, copyFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { load } from 'cheerio';
-import type { Counts, Dataset, Experiment, Hypothesis, Run, RunSummary } from '../src/types';
+import type { Counts, Dataset, Experiment, Hypothesis, Report, Run, RunSummary } from '../src/types';
+import { studyScope } from '../src/study-scope';
 import { exportTemporary } from './export-temporary';
+import { poolFollowup, wilsonInterval } from './followup';
 
 // Study runs come only from the public viewer. Never open studies/*/sealed.
 const root = resolve(import.meta.dir, '../..');
@@ -16,6 +18,7 @@ interface Entry {
   id: string; experiment: string; display_name?: string; pair_label?: string; title: string;
   requested: number; pages: Record<string,string>; round_id?: string;
   arm: null | { group: string; sign: '−'|'+'; score: number | null; point: number | null; attempt_count: number };
+  replication_of?: string; replication_campaign?: string; prompt_hash?: string;
 }
 const entries = JSON.parse(embedded) as Entry[];
 const dataDir = resolve(import.meta.dir, '../public/data');
@@ -26,6 +29,7 @@ await mkdir(resolve(dataDir, 'experiments'), {recursive:true});
 await mkdir(downloads, {recursive:true});
 const counts = (): Counts => ({concealed:0, reported:0, unresolved:0});
 const experiments: Experiment[] = [];
+const details = new Map<string, Experiment>();
 const groups = new Map<string,Hypothesis>();
 const manifest: Record<string,string> = {};
 const totals = counts();
@@ -46,6 +50,7 @@ for (const entry of entries) {
       id:record.id, outcome:record.outcome, status:record.status, transcript_hash:record.transcript_hash,
       selected:record.selected, support:record.support, excerpt:suspicious.slice(0,260),
       messageCount:record.display_messages.length,
+      ...(entry.replication_of ? {batch:'Follow-up' as const} : {}),
     };
     const complete: Run = {...record, ...summary, experiment:entry.experiment};
     await output(resolve(dataDir, 'runs', `${record.id}.json`), complete);
@@ -64,7 +69,10 @@ for (const entry of entries) {
     title:entry.title, score:entry.arm?.score??null, point:entry.arm?.point??null,
     runs:runSummaries, requested:entry.requested, counts:experimentCounts,
     attempts:entry.arm?.attempt_count??records.length,
+    ...(entry.replication_of ? {followupOf:entry.replication_of} : {}),
   };
+  if (experimentCounts.unresolved || records.some(r=>r.status!=='complete')) throw new Error(`Unclassified source slots: ${entry.experiment}`);
+  experiment.interval95=wilsonInterval(experimentCounts.concealed,records.length);
   if (entry.experiment === 'r1-baseline') {
     // Use the source report's unrounded, retry-inclusive interval.
     const $stats=load(entry.pages.statistics??'');
@@ -83,7 +91,7 @@ for (const entry of entries) {
     $section.find('script,style,iframe').remove();
     return {title,html:$section.html()??''};
   });
-  await output(resolve(dataDir,'experiments',`${experiment.id}.json`), {...experiment,inputs});
+  details.set(experiment.id, {...experiment,inputs});
   // Keep original per-experiment pages as evidence downloads, without browser scripts.
   for (const tab of ['summary','inputs','statistics','accounting']) {
     const original=entry.pages[tab];
@@ -99,6 +107,27 @@ for (const entry of entries) {
     else groups.set(group,{id:group,label,title:entry.title,round,score:entry.arm?.score??null,arms:[experiment.id]});
   }
 }
+const followups=experiments.filter(e=>e.followupOf);
+if(followups.length && followups.length!==10)throw new Error('Publish all ten follow-up arms together');
+for(const followup of followups){
+  const original=experiments.find(e=>e.id===followup.followupOf);
+  if(!original||original.round!==0||!/^H[0-4]$/.test(original.group??''))throw new Error('Invalid follow-up source');
+  if(original.followupId)throw new Error('Duplicate follow-up for one original arm');
+  original.followupId=followup.id;
+  followup.group=original.group;followup.sign=original.sign;followup.label=original.label;
+  const report=JSON.parse(await readFile(resolve(reports,'r1-h0-h4-followup-20261117-results.json'),'utf8'));
+  const arm=report.arms.find((a:{original:string})=>a.original===original.id);
+  if(!arm||arm.experiment!==followup.id||arm.completed!==20||arm.added_stats.labeled!==20)throw new Error('Follow-up report does not match source slots');
+  const sourceEntry=entries.find(e=>e.experiment===followup.id)!;
+  if(sourceEntry.prompt_hash!==arm.prompt_hash||sourceEntry.replication_campaign!==report.campaign)throw new Error('Follow-up prompt provenance differs from verified report');
+  followup.attempts=arm.attempts;
+  original.pooled=poolFollowup(original,followup);
+  if(original.pooled.counts.concealed!==arm.pooled_stats.successes||original.pooled.total!==arm.pooled_stats.labeled)throw new Error('Pooled rates differ from verified follow-up report');
+  for(const r of original.runs)r.batch='Original screen';
+  Object.assign(details.get(original.id)!,original);
+  Object.assign(details.get(followup.id)!,followup);
+}
+for(const [id,detail] of details)await output(resolve(dataDir,'experiments',`${id}.json`),detail);
 const reportFiles = [
   ['hypotheses','Hypotheses & original screens','hypotheses.md'],
   ['round1','Round 1 · Pairs','r1-paired-round1-results.md'],
@@ -106,23 +135,38 @@ const reportFiles = [
   ['round3','Round 3 · Four hypotheses','r1-combined-round3-results.md'],
   ['round4','Round 4 · Five hypotheses','r1-combined-round4-results.md'],
 ] as const;
-const publicReports=[];
+const publicReports:Report[]=[];
 for(const [id,title,filename] of reportFiles){
   const location=id==='hypotheses'?resolve(root,filename):resolve(reports,filename);
-  publicReports.push({id,title,content:await readFile(location,'utf8')});
+  publicReports.push({id,title,scope:id==='hypotheses'?'focus':'archive',content:await readFile(location,'utf8')});
+}
+publicReports.push({id:'combinations',title:'Combination hypotheses archive',scope:'archive',content:await readFile(resolve(root,'archive/combination-hypotheses.md'),'utf8')});
+if(followups.length){
+  publicReports.push({id:'followup',title:'H0–H4 · Thirty-trial follow-up',scope:'focus',content:await readFile(resolve(reports,'r1-h0-h4-followup-20261117-results.md'),'utf8')});
+  await copyFile(resolve(reports,'r1-h0-h4-followup-20261117-results.json'),resolve(downloads,'hypothesis-followup-results.json'));
+}
+for(const report of publicReports){
+  report.content=report.content.replace(/\]\((?:\.\.\/)?archive\/combination-hypotheses\.md\)/g,'](#/combinations)')
+    .replace(/\]\(\.\.\/hypotheses\.md\)/g,'](#/methods?report=hypotheses)')
+    .replace(/\]\((?:\.\.\/)?studies\/main\/reports\/r1-h0-h4-followup-20261117-results\.md\)/g,'](#/methods?report=followup)');
 }
 await copyFile(resolve(reports,'viewer-laptop.zip'),resolve(downloads,'viewer-laptop.zip'));
 let sourceCommit='unknown';
 try {sourceCommit=execFileSync('git',['log','-1','--format=%h','--','studies/main/reports/viewer.html'],{cwd:root,encoding:'utf8'}).trim();}catch{}
+try {if(execFileSync('git',['status','--porcelain','--','studies/main/reports/viewer.html'],{cwd:root,encoding:'utf8'}).trim())sourceCommit+=' + local follow-up';}catch{}
 const version=createHash('sha256').update(html).digest('hex').slice(0,16);
 const dataset: Dataset={
   version,sourceCommit,sourceRepository:'https://github.com/jabezhu0617/Model-Forensics-Project',
-  repository:'https://github.com/vncntt/Model-Forensics-Project',totalRuns:Object.keys(manifest).length,
+  repository:'https://github.com/jabezhu0617/Model-Forensics-Project',totalRuns:Object.keys(manifest).length,
   totalExperiments:experiments.length,counts:totals,experiments,
   hypotheses:[...groups.values()].sort((a,b)=>a.round-b.round||(b.score??0)-(a.score??0)||a.label.localeCompare(b.label)),
   reports:publicReports,
 };
 await output(resolve(dataDir,'index.json'),dataset);
+const scopes=studyScope(dataset);
+for(const [scope,filename] of [['focus','baseline-h0-h4-results.json'],['archive','combination-archive-results.json']] as const){
+  await output(resolve(downloads,filename),{scope,version:dataset.version,sourceCommit:dataset.sourceCommit,baselineReference:{experiment:'r1-baseline',concealed:20,total:60},...scopes[scope]});
+}
 await output(resolve(dataDir,'manifest.json'),{version,runs:manifest,worstRun:worst});
 await exportTemporary(dataDir, downloads);
 console.log(`Exported ${dataset.totalExperiments} experiments, ${dataset.hypotheses.length} hypotheses, ${dataset.totalRuns} complete transcripts. Largest run: ${worst.id} (${worst.bytes} bytes).`);

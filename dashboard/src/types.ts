@@ -3,6 +3,7 @@ export interface Counts { concealed: number; reported: number; unresolved: numbe
 export interface RunSummary {
   id: string; outcome: Outcome; status: string; transcript_hash: string;
   selected: boolean; support: string; excerpt: string; messageCount: number;
+  batch?: 'Original screen' | 'Follow-up';
 }
 export interface Segment { text: string; anchors: [number, number][]; label: string; kind: string }
 export interface Message { role: string; index: number; segments: Segment[]; exit_code?: number; step?: number }
@@ -20,14 +21,21 @@ export interface Run extends RunSummary {
   temporary?: TemporarySource;
 }
 export interface InputSection { title: string; html: string }
+export interface Interval95 { method: 'Wilson'; lower: number; upper: number }
+export interface PooledResults {
+  counts: Counts; total: number; attempts: number; interval95: Interval95; sources: string[];
+}
 export interface Experiment {
   id: string; label: string; group: string | null; round: number; sign: '−' | '+' | null;
   title: string; score: number | null; point: number | null; runs: RunSummary[];
   requested: number; counts: Counts; attempts: number; inputs?: InputSection[];
-  interval95?: { method: 'Wilson'; lower: number; upper: number };
+  interval95?: Interval95;
+  followupOf?: string;
+  followupId?: string;
+  pooled?: PooledResults;
 }
 export interface Hypothesis { id: string; label: string; title: string; round: number; score: number | null; arms: string[] }
-export interface Report { id: string; title: string; content: string }
+export interface Report { id: string; title: string; content: string; scope?: 'focus' | 'archive' }
 export interface Dataset {
   version: string; sourceCommit: string; sourceRepository: string; repository: string;
   totalRuns: number; totalExperiments: number; counts: Counts;

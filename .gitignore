@@ -1,4 +1,5 @@
 .tools/
+/.wrangler/
 __pycache__/
 *.py[cod]
 .venv/

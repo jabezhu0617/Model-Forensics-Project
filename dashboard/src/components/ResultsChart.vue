@@ -2,7 +2,7 @@
 import chartUrl from '../assets/plots/concealment.svg';
 import chartData from '../assets/plots/concealment-data.json';
 import { percent } from '../data';
-const description = 'Concealment rate. ' + chartData.bars.map(bar => `${bar.group}${bar.series==='baseline'?'':` ${bar.series}`}: ${percent(bar.count,bar.total)} (${bar.count} of ${bar.total} trials)${bar.interval95?`, 95% ${bar.interval95.method} confidence interval ${(bar.interval95.lower*100).toFixed(1)}–${(bar.interval95.upper*100).toFixed(1)}%`:''}`).join('; ') + '. Error bars are shown only where reported in the source.';
+const description = 'Concealment rate. ' + chartData.bars.map(bar => `${bar.group}${bar.series==='baseline'?'':` ${bar.series}`}: ${percent(bar.count,bar.total)} (${bar.count} of ${bar.total} trials)${bar.interval95?`, 95% ${bar.interval95.method} confidence interval ${(bar.interval95.lower*100).toFixed(1)}–${(bar.interval95.upper*100).toFixed(1)}%`:''}`).join('; ') + '. The dotted horizontal line marks the 33.3% baseline. Error bars are two-sided 95% Wilson confidence intervals for each rate.';
 </script>
 
 <template>
@@ -11,6 +11,7 @@ const description = 'Concealment rate. ' + chartData.bars.map(bar => `${bar.grou
     <div class="chart-scroll" tabindex="0" aria-label="Results graph; scroll horizontally on small screens">
       <img class="matplotlib-chart" :src="chartUrl" :alt="description" width="950" height="425">
     </div>
+    <figcaption v-if="chartData.bars.some(bar=>bar.total===30)">The dotted line marks the 33.3% baseline. H0–H4 pool the original 10 trials and 20 follow-up trials per direction. <RouterLink to="/methods?report=followup">Read the follow-up results →</RouterLink></figcaption>
   </figure>
 </template>
 
