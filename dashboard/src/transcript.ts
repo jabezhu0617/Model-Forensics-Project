@@ -7,11 +7,14 @@ export const transcriptKinds = [
   {id: 'assistant', label: 'Assistant output'},
   {id: 'tool-call', label: 'Tool call'},
   {id: 'tool', label: 'Tool result'},
+  {id: 'submission', label: 'Final submission'},
   {id: 'event', label: 'Run info'},
 ] as const;
+export type TranscriptKind = (typeof transcriptKinds)[number]['id'];
 export function segmentKind(message: Message, segment: Segment) {
   if (segment.kind === 'reasoning') return 'reasoning';
-  if (segment.kind === 'command') return 'tool-call';
+  if (segment.kind === 'submission') return 'submission';
+  if (segment.kind === 'command' || segment.kind === 'unparsed') return 'tool-call';
   return message.role;
 }
 export function messageKind(message: Message) {

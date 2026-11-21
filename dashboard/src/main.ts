@@ -17,6 +17,7 @@ const router=createRouter({history:createWebHashHistory(),routes:[
   {path:'/run/:id',component:RunView},
   {path:'/examples',component:TemporaryView},
   {path:'/examples/:id',component:RunView},
+  {path:'/prompt-drafts/:id?',component:()=>import('./views/PromptDrafts.vue')},
   {path:'/methods',component:Methods},
   {path:'/:pathMatch(.*)*',redirect:'/'},
 ],scrollBehavior:(to,from)=>to.path===from.path?false:{top:0}});

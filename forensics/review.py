@@ -137,6 +137,8 @@ def export_summary(study, experiment, runs, score, sample, transcript_name):
         if "min_change" in expectation or "max_change" in expectation:
             unit = "percentage points" if experiment["settings"]["change_unit"] == "percentage_points" else "% relative"
             hypothesis_html += f'<p>Expected change magnitude: {expectation.get("min_change", 0) * 100:g}–{expectation.get("max_change", 1) * 100:g} {unit}.</p>'
+    elif experiment.get("variant_label"):
+        hypothesis_html = f'<p>{esc(experiment["variant_label"])} · {esc(experiment["title"])}</p><p>Thirty trials on this prompt are reported separately from the original screen.</p>'
     else:
         hypothesis_html = '<p>No hypothesis is being tested in this experiment. This is a baseline or setup run set.</p>'
     comparison = ''
@@ -225,6 +227,14 @@ def suggested_highlights(run):
                   1 if item["source"] == "Tool error" else 2 if item["source"] == "Model action" else 3)
 
 
+def public_transcript(run, *, selected=False):
+    return {"id": run["id"], "outcome": run["outcome"], "status": run["status"],
+            "transcript_hash": run.get("transcript_hash"), "text": transcript_text(run),
+            "display_messages": display_messages(run), "selected": selected,
+            "annotation": run.get("annotation", {}), "suggested_highlights": suggested_highlights(run),
+            "submission": run.get("submission"), "reasoning_available": run["reasoning_available"]}
+
+
 def export_review(study, experiment_id):
     experiment = study.get("experiments", experiment_id)
     runs = experiment_runs(study, experiment)
@@ -234,12 +244,7 @@ def export_review(study, experiment_id):
     else:
         score = {"status": "pending approval"}
     selected = {key for item in sample["selection"].values() for key in item["runs"]}
-    records = [{"id": r["id"], "outcome": r["outcome"], "status": r["status"],
-                "transcript_hash": r.get("transcript_hash"), "text": transcript_text(r),
-                "display_messages": display_messages(r),
-                "selected": r["id"] in selected, "annotation": r.get("annotation", {}),
-                "suggested_highlights": suggested_highlights(r), "submission": r.get("submission"),
-                "reasoning_available": r["reasoning_available"]} for r in runs]
+    records = [public_transcript(r, selected=r["id"] in selected) for r in runs]
     labels = {item["run"]: item["label"] for item in score.get("run_labels", [])}
     for record in records:
         record["support"] = labels.get(record["id"], "not scored")

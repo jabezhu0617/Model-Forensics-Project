@@ -1,4 +1,4 @@
-import type { Annotation, Dataset, Experiment, Run, TemporarySummary } from './types';
+import type { Annotation, Dataset, Experiment, PromptDraft, PromptDraftSummary, ReasoningTrace, Run, TemporarySummary } from './types';
 const cache=new Map<string,Promise<unknown>>();
 async function get<T>(path:string):Promise<T>{
   let pending=cache.get(path);
@@ -11,7 +11,11 @@ async function get<T>(path:string):Promise<T>{
 export const dataset=()=>get<Dataset>('/data/index.json');
 export const experiment=(id:string)=>get<Experiment>(`/data/experiments/${encodeURIComponent(id)}.json`);
 export const run=(id:string)=>get<Run>(`/data/runs/${encodeURIComponent(id)}.json`);
+export const reasoningRuns=()=>get<string[]>('/data/reasoning/index.json');
+export const reasoningTrace=(id:string)=>get<ReasoningTrace>(`/data/reasoning/${encodeURIComponent(id)}.json`);
 export const temporaryTranscripts=()=>get<TemporarySummary[]>('/data/temporary/index.json');
+export const promptDraftIndex=()=>get<PromptDraftSummary[]>('/data/prompt-drafts/index.json');
+export const promptDraft=(id:string)=>get<PromptDraft>(`/data/prompt-drafts/${encodeURIComponent(id)}.json`);
 export async function api<T>(path:string,method='GET',body?:unknown):Promise<T>{
   const response=await fetch(`/api/${path}`,{method,headers:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
   const result=await response.json() as T&{error?:string};

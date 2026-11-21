@@ -3,6 +3,7 @@
 /Masterdoc-v2.md -text -whitespace
 /forensics/assets/* -text whitespace=cr-at-eol
 /studies/main/reports/viewer.html -text whitespace=cr-at-eol
+/studies/main/reports/required-read-replacements.json -text whitespace=cr-at-eol
 
 # Consistent checkout formats for the new application source.
 /.gitattributes text eol=lf

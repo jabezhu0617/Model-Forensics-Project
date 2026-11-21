@@ -7,7 +7,9 @@ test('current work contains baseline and all five thirty-trial hypotheses; combi
   const data=JSON.parse(await readFile(new URL('../public/data/index.json',import.meta.url),'utf8')) as Dataset;
   const {focus,archive}=studyScope(data);
   expect(focus.hypotheses.map(h=>h.id).sort()).toEqual(['H0','H1','H2','H3','H4']);
-  expect(focus.totalRuns).toBe(360);expect(focus.promptArms).toBe(11);
+  const variants=focus.experiments.filter(e=>e.variant);
+  expect([0,5,10]).toContain(variants.length);
+  expect(focus.totalRuns).toBe(360+30*variants.length);expect(focus.promptArms).toBe(11+variants.length);
   expect(focus.experiments.filter(e=>e.followupOf)).toHaveLength(10);
   expect(archive.hypotheses).toHaveLength(26);expect(archive.totalRuns).toBe(520);
   expect(focus.totalRuns+archive.totalRuns).toBe(data.totalRuns);

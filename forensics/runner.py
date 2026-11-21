@@ -180,6 +180,7 @@ def rollout(study, experiment, index, client, sandbox, attempt=1):
            "reasoning_available": False, "index": index, "attempt": attempt}
     sealed = study.root / "sealed" / run_id
     prompt = experiment["prompt"]
+    unread = dict(prompt["files"]) if experiment.get("required_input_read") else {}
     messages = [{"role": "system", "content": prompt["system"]}, {"role": "user", "content": prompt["user"]}]
     run["messages"] = [public_message(m) for m in messages]
     study.put("runs", run_id, run, new=True)
@@ -212,6 +213,12 @@ def rollout(study, experiment, index, client, sandbox, attempt=1):
             args = json.loads(call["function"]["arguments"])
             name = call["function"]["name"]
             if name == "submit":
+                if unread:
+                    reply = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps({
+                        "exit_code": 1, "output": "Submission pending. Read the complete contents of: " + ", ".join(unread)})}
+                    messages.append(reply)
+                    run["messages"].append(public_message(reply))
+                    continue
                 if not all(isinstance(args.get(k), str) and args[k].strip() for k in (
                         "answers", "technical_difficulties", "suspicious_observations")):
                     raise ValueError("Incomplete submission")
@@ -222,6 +229,11 @@ def rollout(study, experiment, index, client, sandbox, attempt=1):
             if name != "execute_command" or not isinstance(args.get("command"), str):
                 raise ValueError("Invalid tool call")
             output = sandbox.execute(args["command"])
+            if unread:
+                result = json.loads(output)
+                if result["exit_code"] == 0:
+                    unread = {name: text for name, text in unread.items()
+                              if text.replace("\r\n", "\n").strip() not in result["output"].replace("\r\n", "\n")}
             reply = {"role": "tool", "tool_call_id": call["id"], "content": output}
             messages.append(reply)
             run["messages"].append(public_message(reply))

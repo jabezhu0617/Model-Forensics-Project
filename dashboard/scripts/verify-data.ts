@@ -5,37 +5,67 @@ import { load } from 'cheerio';
 import type { Dataset, Experiment, Run } from '../src/types';
 import { poolFollowup, wilsonInterval } from './followup';
 import { studyScope } from '../src/study-scope';
+import { loadRequiredReads } from './required-reads';
 const root=resolve(import.meta.dir,'..');
 const d=JSON.parse(await readFile(resolve(root,'public/data/index.json'),'utf8')) as Dataset;
-const source=load(await readFile(resolve(root,'../studies/main/reports/viewer.html'),'utf8'));
+const reports=resolve(root,'../studies/main/reports');
+const originalHtml=await readFile(resolve(reports,'viewer.html'),'utf8');
+const source=load(originalHtml);
+const sourceVersion=createHash('sha256').update(originalHtml).digest('hex').slice(0,16);
+const requiredReads=await loadRequiredReads(reports,sourceVersion);
+if(JSON.stringify(d.requiredReads)!==JSON.stringify(requiredReads?.summary))throw new Error('Incorrect required-read summary');
 const entries=JSON.parse(source('script#data').text()) as {experiment:string;pages:Record<string,string>}[];
 let verified=0;
+let applied=0;
 const sourceCounts={concealed:0,reported:0,unresolved:0};
 for(const e of entries){
   const records=JSON.parse(load(e.pages.transcripts??'')('script#records').text()) as Run[];
-  for(const r of records){
+  const published=d.experiments.find(x=>x.id===e.experiment);
+  if(!published||published.runs.length!==records.length)throw new Error(`Incorrect trial count for ${e.experiment}`);
+  for(const [slot,r] of records.entries()){
     const exported=JSON.parse(await readFile(resolve(root,'public/data/runs',`${r.id}.json`),'utf8')) as Run;
     for(const field of ['text','transcript_hash','outcome','display_messages','submission'] as const){
       if(JSON.stringify(r[field])!==JSON.stringify(exported[field]))throw new Error(`Changed ${field}: ${r.id}`);
     }
+    const pair=requiredReads?.pairs.get(r.id);
+    const effective=published.runs[slot]!;
+    if(effective.id!==(pair?.replacement.id??r.id)||effective.outcome!==(pair?.replacement.outcome??r.outcome)){
+      throw new Error(`Incorrect outcome or trial for slot ${r.id}`);
+    }
+    if(pair){
+      const replacement=JSON.parse(await readFile(resolve(root,'public/data/runs',`${effective.id}.json`),'utf8')) as Run;
+      for(const field of ['text','transcript_hash','outcome','display_messages','submission'] as const){
+        if(JSON.stringify(pair.replacement[field])!==JSON.stringify(replacement[field]))throw new Error(`Changed replacement ${field}: ${effective.id}`);
+      }
+      if(exported.supersededBy!==replacement.id||JSON.stringify(effective.replaces)!==JSON.stringify(pair.original)||
+         JSON.stringify(replacement.fileReads)!==JSON.stringify(pair.file_reads))throw new Error(`Missing evidence links: ${r.id}`);
+      applied++;
+    }
     verified++;
-    sourceCounts[r.outcome]++;
+    sourceCounts[effective.outcome]++;
   }
 }
+if(applied!==(requiredReads?.pairs.size??0))throw new Error('Incomplete required-read replacement mapping');
 if(verified!==d.totalRuns||entries.length!==d.totalExperiments)throw new Error('Counts do not match');
 const baseline=d.experiments.find(e=>e.id==='r1-baseline');
 if(!baseline||baseline.counts.concealed!==20||baseline.runs.length!==60)throw new Error('Baseline changed');
 if(d.hypotheses.length!==31||JSON.stringify(d.counts)!==JSON.stringify(sourceCounts))throw new Error('Unexpected aggregate counts');
 const followups=d.experiments.filter(e=>e.followupOf);
-if(followups.length && (followups.length!==10||d.totalRuns!==880||d.totalExperiments!==73))throw new Error('Incomplete follow-up export');
+const variants=d.experiments.filter(e=>e.variant);
+const variantIds=['h1-minus-b','h1-plus-b','h2-minus-b','h3-minus-b','h4-minus-b'];
+const rewriteIds=['h0-minus-r','h0-plus-r','h2-plus-r','h3-plus-r','h4-plus-r'];
+if(![0,5,10].includes(variants.length)||variants.length>0&&variantIds.some(id=>!variants.some(e=>e.variant===id&&e.id==='r1-variant-'+id))||
+    variants.length===10&&rewriteIds.some(id=>!variants.some(e=>e.variant===id&&e.id==='r1-rewrite-'+id))||
+    variants.some(e=>e.runs.length!==30||e.pooled||e.followupOf||e.score!==null||e.point!==null))throw new Error('Invalid prompt edit results');
+if(followups.length && (followups.length!==10||d.totalRuns!==880+30*variants.length||d.totalExperiments!==73+variants.length))throw new Error('Incomplete study export');
 if(!followups.length && (d.totalRuns!==680||d.counts.concealed!==113||d.counts.reported!==567))throw new Error('Original export changed');
 for(const added of followups){
   const original=d.experiments.find(e=>e.id===added.followupOf)!;
   if(original.followupId!==added.id||JSON.stringify(original.pooled)!==JSON.stringify(poolFollowup(original,added)))throw new Error('Incorrect pooled follow-up counts, interval or provenance');
 }
-console.log(`Verified all ${verified} transcripts, source hashes, message content, submissions and outcomes against the original export.`);
+console.log(`Verified ${verified} result slots and ${applied} replacement transcripts against the source exports.`);
 const scopes=studyScope(d);
-if(scopes.focus.totalRuns!==360||scopes.focus.hypotheses.length!==5||scopes.archive.totalRuns!==520||scopes.archive.hypotheses.length!==26)throw new Error('Incorrect active/archive scope');
+if(scopes.focus.totalRuns!==360+30*variants.length||scopes.focus.promptArms!==11+variants.length||scopes.focus.hypotheses.length!==5||scopes.archive.totalRuns!==520||scopes.archive.hypotheses.length!==26)throw new Error('Incorrect active/archive scope');
 for(const [scope,filename] of [['focus','baseline-h0-h4-results.json'],['archive','combination-archive-results.json']] as const){
   const exported=JSON.parse(await readFile(resolve(root,'public/downloads',filename),'utf8'));
   if(JSON.stringify(exported.experiments)!==JSON.stringify(scopes[scope].experiments)||exported.totalRuns!==scopes[scope].totalRuns)throw new Error('Scope download does not match source batches');
@@ -50,7 +80,7 @@ if(!(await readFile(resolve(plotDir,'concealment.svg'),'utf8')).includes('id="ba
 const expectedIds=['r1-baseline',...['H0','H1','H2','H3','H4'].flatMap(id=>{
   const h=d.hypotheses.find(h=>h.id===id&&h.round===0);
   if(!h)throw new Error(`Missing hypothesis ${id}`);
-  return ['−','+'].map(sign=>d.experiments.find(e=>h.arms.includes(e.id)&&e.sign===sign)!.id);
+  return ['−','+'].flatMap(sign=>d.experiments.filter(e=>h.arms.includes(e.id)&&e.sign===sign).sort((a,b)=>Number(!!a.variant)-Number(!!b.variant)).map(e=>e.id));
 })];
 if(JSON.stringify(plot.bars.map(b=>b.experiment))!==JSON.stringify(expectedIds))throw new Error('Matplotlib chart has incorrect experiment groups');
 for(const bar of plot.bars){
@@ -63,11 +93,11 @@ for(const bar of plot.bars){
   if(!bar.interval95||Math.abs(bar.interval95.lower-expected.lower)>1e-12||Math.abs(bar.interval95.upper-expected.upper)>1e-12)throw new Error('Incorrect Wilson interval');
 }
 const intervals=plot.bars.filter(bar=>bar.interval95);
-if(intervals.length!==11||intervals[0]!.experiment!=='r1-baseline')throw new Error('Expected 95% intervals for all eleven bars');
+if(intervals.length!==11+variants.length||intervals[0]!.experiment!=='r1-baseline')throw new Error('Expected 95% intervals for all bars');
 const ci=intervals[0]!.interval95!;
 if(ci.method!=='Wilson'||Math.abs(ci.lower-0.22729261523522677)>1e-12||Math.abs(ci.upper-0.45943133547880297)>1e-12)throw new Error('Baseline confidence interval differs from the source report');
 for(const format of ['svg','png'] as const){
   const hash=createHash('sha256').update(await readFile(resolve(plotDir,`concealment.${format}`))).digest('hex');
   if(hash!==plot[`${format}_sha256`])throw new Error(`Matplotlib ${format} does not match its verified data`);
 }
-console.log('Verified all 11 Matplotlib bars and Wilson confidence intervals, pooled follow-up provenance, and both image checksums against the exported study data.');
+console.log(`Verified all ${intervals.length} Matplotlib bars, Wilson intervals, source trials and image checksums.`);

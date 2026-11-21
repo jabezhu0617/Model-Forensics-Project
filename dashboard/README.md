@@ -49,6 +49,10 @@ Python is needed only to regenerate the committed images; normal site builds use
 
 ## Verification
 
+The B variants and R rewrites are separate from the original arms and their pooled follow-ups. From the project root, `python scripts/run_prompt_variants.py run --workers 100` resumes the five B batches. Add `--rewrites` to run the five R batches after B completes. `python scripts/finalize_prompt_variants.py` requires 150 classified slots before exporting B results; add `--rewrites` after finalizing B to export the R results. Regenerate the graph after preprocessing the updated data. The published reasoning supplement covers the original 360 focused trials; reasoning from the new batches remains in the local archive.
+
+The two `prompt-exposure-audit` reports list which edited sections reached each trial before submission. The required-read export maps 170 affected trials to their replacements and records the tool result that returned each input file. The dashboard uses the replacement outcome for each mapped slot and links to both transcripts. The standalone offline ZIP contains the first-pass results. The dashboard and its focus-results download include the replacements.
+
 ```sh
 bun run build
 bun test
@@ -57,7 +61,7 @@ bun run verify:data
 bun run test:browser
 ```
 
-The data verification compares every transcript's full text, hash, displayed messages, final submission, and outcome with the original viewer export. Browser checks include the largest transcript, search and expansion, full-width desktop/mobile layouts, and the absence of note controls or annotation polling. `scripts/smoke.ts` uses Chrome on macOS; adjust its executable path for other systems.
+Data verification compares transcript text, hashes, displayed messages, submissions, outcomes, and replacement mappings with the source exports. Browser checks cover file-read evidence links, the largest transcript, search and expansion, full-width desktop and mobile layouts, and the read-only interface. Set `CHROME_EXECUTABLE` to the Chrome or Edge executable on your system.
 
 ## Update the dashboard through GitHub
 
@@ -70,6 +74,16 @@ GitHub commits alone do not change the live site. Native Git integration or an A
 To update the study, replace the public export at `studies/main/reports/viewer.html`, its companion `viewer-laptop.zip`, and the published report files. The preprocessing script recreates the site's data during the build; generated JSON is intentionally not committed. Study runs come only from the public viewer and published reports, never `sealed/` or API credentials. Separately labeled temporary examples come from the public archive sources described below. Full transcript text is preserved; display previews do not change source data.
 
 The site loads an index first and individual experiment/transcript files on demand. The original ZIP remains available as a download. Existing annotation records remain keyed to run IDs and transcript hashes.
+
+**Prompt drafts** shows ten H0–H4 inputs, one per direction. Where both A and B were proposed, the B variant replaces the A rewrite in the viewer. Wording rewrites start from the original arm and variants start from the frozen baseline. The standard build applies the listed edits to published input records and writes the previews under `dist/data/prompt-drafts/`. The page shows both prompts and all four attachments and opens the edited sections and deployment notes by default. Contact addresses are part of the study scenarios.
+
+Open any wording rewrite to compare each input with its original arm. The build also checks that every tested B or R preview matches the recorded experiment inputs.
+
+Transcript pages let readers choose which sections to show. Reasoning is unchecked on every run and hidden sections are excluded from search. The temporary example retains its original log download.
+
+On a baseline or H0–H4 transcript, checking **Reasoning** loads that run’s supplement if it has been published. In a build without the supplement, use **Connect reasoning folder** and select the prepared `dashboard/dist/data/reasoning` folder. The browser keeps the selected files in its own storage and does not upload them. Connect once per browser profile and site. Clear the viewer’s site data to remove the saved files.
+
+To prepare an optional reasoning supplement for the current baseline and H0–H4, run `bun run prepare:reasoning` **after** `bun run build` and `bun run verify:data`. The exporter writes only response reasoning text and its message positions into `dist/data/reasoning/`. The site fetches each supplement when the reader checks Reasoning. Existing study downloads and archives are unchanged. To publish that prepared bundle to the personal site, run `bun run scripts/deploy-personal.ts --include-public-reasoning` directly. `bun run deploy` rebuilds and publishes without the supplement. Publishing a supplement on a public site makes it publicly downloadable; the toggle only controls what is displayed.
 
 ## Original Cloudflare configuration
 

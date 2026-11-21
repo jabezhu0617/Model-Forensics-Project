@@ -4,9 +4,11 @@ export interface RunSummary {
   id: string; outcome: Outcome; status: string; transcript_hash: string;
   selected: boolean; support: string; excerpt: string; messageCount: number;
   batch?: 'Original screen' | 'Follow-up';
+  replaces?: { id:string; transcript_hash:string; index:number; outcome:Outcome };
 }
 export interface Segment { text: string; anchors: [number, number][]; label: string; kind: string }
 export interface Message { role: string; index: number; segments: Segment[]; exit_code?: number; step?: number }
+export interface ReasoningTrace { transcript_hash: string; blocks: {message: number; text: string}[] }
 export interface TemporarySource {
   title: string; model: string; scenario: string; run: string; status: string;
   sourceUrl: string; sourceRevision: string; downloadUrl: string;
@@ -19,8 +21,21 @@ export interface Run extends RunSummary {
   submission: Record<string,string> | null; annotation: { reviewer?: string; highlights?: Highlight[]; outcome?: Outcome };
   suggested_highlights: Highlight[]; reasoning_available: boolean;
   temporary?: TemporarySource;
+  supersededBy?: string;
+  fileReads?: Record<string,number>;
 }
 export interface InputSection { title: string; html: string }
+export interface PromptDraftSummary {
+  id:string; label:string; title:string; kind:'rewrite'|'variant'; group:string; sourceId:string;
+}
+export interface PromptComparison {
+  title:string; originalTrials:number; followupTrials:number; earlierScreen:boolean;
+  sections:Record<string,string>;
+}
+export interface PromptDraft extends PromptDraftSummary {
+  previewContact:boolean; sections:{key:string;text:string;changed:boolean}[];
+  comparison?:PromptComparison;
+}
 export interface Interval95 { method: 'Wilson'; lower: number; upper: number }
 export interface PooledResults {
   counts: Counts; total: number; attempts: number; interval95: Interval95; sources: string[];
@@ -32,6 +47,7 @@ export interface Experiment {
   interval95?: Interval95;
   followupOf?: string;
   followupId?: string;
+  variant?: string;
   pooled?: PooledResults;
 }
 export interface Hypothesis { id: string; label: string; title: string; round: number; score: number | null; arms: string[] }
@@ -39,6 +55,7 @@ export interface Report { id: string; title: string; content: string; scope?: 'f
 export interface Dataset {
   version: string; sourceCommit: string; sourceRepository: string; repository: string;
   totalRuns: number; totalExperiments: number; counts: Counts;
+  requiredReads?: { total:number; originalConcealed:number; replacementConcealed:number };
   experiments: Experiment[]; hypotheses: Hypothesis[]; reports: Report[];
 }
 export interface Annotation {

@@ -211,8 +211,11 @@ def _experiment_result(study, experiment):
                        method="paired" if screen_group(experiment) else settings.get("screen_scoring", "support_count"),
                        strong_change=settings.get("screen_strong_change", 0.30),
                        strong_inclusive=settings.get("screen_strong_inclusive", True))
-    result = method(base_runs, runs, experiment["expectation"], **options)
-    result.update(experiment=experiment_id, hypothesis=experiment["hypothesis"],
+    variant = experiment.get("variant_label")
+    expectation = ({"metric": "concealed", "direction": "increase" if variant[2] == "+" else "decrease"}
+                   if variant else experiment["expectation"])
+    result = method(base_runs, runs, expectation, **options)
+    result.update(experiment=experiment_id, hypothesis=variant[:2] if variant else experiment["hypothesis"],
                   requested=experiment["count"], synthetic=experiment["synthetic"],
                   total_attempts_including_retries=len(study.attempts(experiment_id)))
     result["complete"] = (len(runs) == experiment["count"] and len(base_runs) == base["count"]

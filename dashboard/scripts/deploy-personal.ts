@@ -1,5 +1,5 @@
 /** Publish the read-only viewer in its own account, from an isolated static bundle. */
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { relative, resolve } from 'node:path';
 import type { Dataset } from '../src/types';
@@ -12,14 +12,19 @@ const config=JSON.parse(await readFile(resolve(dashboard,'personal-hosting.json'
 if(!/^[a-z0-9][a-z0-9-]{0,57}[a-z0-9]$/.test(config.project)||!/^[a-f0-9]{32}$/.test(config.accountId)||!config.branch) {
   throw new Error('Invalid personal Cloudflare hosting configuration');
 }
-const source=resolve(dashboard,'dist');
+const controlsOnly=process.argv.includes('--controls-only');
+const includeReasoning=process.argv.includes('--include-public-reasoning');
+if(controlsOnly&&includeReasoning)throw new Error('The controls-only bundle cannot publish reasoning');
+const source=resolve(dashboard,controlsOnly?'../build/dashboard-transcript-controls':'dist');
 const data=JSON.parse(await readFile(resolve(source,'data/index.json'),'utf8')) as Dataset;
 const plot=JSON.parse(await readFile(resolve(dashboard,'src/assets/plots/concealment-data.json'),'utf8')) as {
   dataset_version:string; svg_sha256:string; bars:{total:number;interval95:unknown}[];
 };
-if(data.version!==plot.dataset_version||data.totalRuns!==880||plot.bars.length!==11||
+const variants=data.experiments.filter(e=>e.variant);
+if(![0,5,10].includes(variants.length)||variants.some(e=>e.runs.length!==30)||
+   data.version!==plot.dataset_version||data.totalRuns!==880+30*variants.length||plot.bars.length!==11+variants.length||
    plot.bars.some((bar,i)=>!bar.interval95||bar.total!==(i===0?60:30))) {
-  throw new Error('Expected the verified thirty-trial follow-up dataset and eleven confidence intervals');
+  throw new Error('Expected verified thirty-trial arms and confidence intervals');
 }
 const release=new Date().toISOString().replace(/[:.]/g,'-');
 const stage=resolve(dashboard,'../build/cloudflare-personal',config.project,release);
@@ -38,7 +43,18 @@ if(createHash('sha256').update(staged).digest('hex')!==
   throw new Error('Staged data differs from the verified build');
 }
 const scopes=studyScope(data);
+const reasoningDir=resolve(stage,'dist/data/reasoning');
+const reasoningIds=JSON.parse(await readFile(resolve(reasoningDir,'index.json'),'utf8')) as string[];
+if(Boolean(reasoningIds.length)!==includeReasoning)throw new Error('Prepared reasoning and the explicit public reasoning flag must agree');
+const eligibleRuns=new Set(scopes.focus.experiments.filter(e=>!e.variant).flatMap(e=>e.runs.map(run=>run.replaces?.id??run.id)));
+const expectedFiles=new Set(['index.json',...reasoningIds.map(id=>`${id}.json`)]);
+const reasoningFiles=await readdir(reasoningDir);
+if(reasoningFiles.length!==expectedFiles.size||reasoningFiles.some(file=>!expectedFiles.has(file))||
+   (reasoningIds.length&&(reasoningIds.length!==eligibleRuns.size||new Set(reasoningIds).size!==eligibleRuns.size||reasoningIds.some(id=>!eligibleRuns.has(id))))) {
+  throw new Error('Unexpected reasoning assets in the deploy bundle');
+}
 console.log(`Publishing ${scopes.focus.totalRuns} focused trials and ${scopes.archive.totalRuns} archived trials to https://${config.project}.pages.dev`);
+if(reasoningIds.length)console.log(`Including public reasoning for ${reasoningIds.length} focused runs.`);
 const result=Bun.spawnSync([process.execPath,resolve(dashboard,'node_modules/wrangler/bin/wrangler.js'),
   'pages','deploy','dist','--project-name',config.project,'--branch',config.branch,'--commit-dirty=true'],{
   cwd:stage,env:{...process.env,CLOUDFLARE_ACCOUNT_ID:config.accountId},
@@ -48,5 +64,6 @@ if(result.exitCode!==0)process.exit(result.exitCode||1);
 await writeFile(resolve(dashboard,'../build/personal-deployment.json'),JSON.stringify({
   ...config,url:`https://${config.project}.pages.dev`,datasetVersion:data.version,
   trials:data.totalRuns,focusTrials:scopes.focus.totalRuns,archivedTrials:scopes.archive.totalRuns,
+  reasoningRuns:reasoningIds.length,
   chartSvgSha256:plot.svg_sha256,stage,published:new Date().toISOString(),
 },null,2)+'\n');

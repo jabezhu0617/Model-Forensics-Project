@@ -7,25 +7,45 @@ import type { Counts, Dataset, Experiment, Hypothesis, Report, Run, RunSummary }
 import { studyScope } from '../src/study-scope';
 import { exportTemporary } from './export-temporary';
 import { poolFollowup, wilsonInterval } from './followup';
+import { loadRequiredReads } from './required-reads';
 
 // Study runs come only from the public viewer. Never open studies/*/sealed.
 const root = resolve(import.meta.dir, '../..');
 const reports = resolve(root, 'studies/main/reports');
 const html = await readFile(resolve(reports, 'viewer.html'), 'utf8');
+const sourceVersion=createHash('sha256').update(html).digest('hex').slice(0,16);
+const requiredReads=await loadRequiredReads(reports,sourceVersion);
 const embedded = load(html)('script#data').text();
 if (!embedded) throw new Error('Viewer contains no embedded experiment data');
 interface Entry {
   id: string; experiment: string; display_name?: string; pair_label?: string; title: string;
   requested: number; pages: Record<string,string>; round_id?: string;
   arm: null | { group: string; sign: '−'|'+'; score: number | null; point: number | null; attempt_count: number };
-  replication_of?: string; replication_campaign?: string; prompt_hash?: string;
+  replication_of?: string; replication_campaign?: string; prompt_hash?: string; variant?: string;
 }
 const entries = JSON.parse(embedded) as Entry[];
+const variantEntries=entries.filter(e=>e.variant);
+type EditReport={
+  completed:number;classified:number;arms:{experiment:string;draft_id:string;label:string;group:string;sign:'−'|'+';title:string;prompt_hash:string;attempts:number;completed:number;concealed:number;reported:number;unresolved:number}[];
+};
+const editReports=new Map<string,EditReport>();
+for(const [kind,stem] of [['b','r1-b-variants-20261120-results'],['r','r1-r-rewrites-20261120-results']] as const){
+  const rows=variantEntries.filter(e=>e.variant?.endsWith('-'+kind));
+  if(!rows.length)continue;
+  const report=JSON.parse(await readFile(resolve(reports,stem+'.json'),'utf8')) as EditReport;
+  if(rows.length!==5||report.arms.length!==5||report.completed!==150||report.classified!==150){
+    throw new Error(`Publish the five complete ${kind.toUpperCase()} batches together`);
+  }
+  editReports.set(kind,report);
+}
+if(variantEntries.length!==5*editReports.size||editReports.has('r')&&!editReports.has('b'))throw new Error('Invalid prompt edit campaign order');
 const dataDir = resolve(import.meta.dir, '../public/data');
 const downloads = resolve(import.meta.dir, '../public/downloads');
 await rm(dataDir, {recursive:true, force:true});
 await mkdir(resolve(dataDir, 'runs'), {recursive:true});
 await mkdir(resolve(dataDir, 'experiments'), {recursive:true});
+await mkdir(resolve(dataDir, 'reasoning'), {recursive:true});
+await mkdir(resolve(dataDir, 'prompt-drafts'), {recursive:true});
 await mkdir(downloads, {recursive:true});
 const counts = (): Counts => ({concealed:0, reported:0, unresolved:0});
 const experiments: Experiment[] = [];
@@ -33,8 +53,12 @@ const details = new Map<string, Experiment>();
 const groups = new Map<string,Hypothesis>();
 const manifest: Record<string,string> = {};
 const totals = counts();
+const originalCounts=new Map<string,Counts>();
+const applied=new Set<string>();
 let worst = {id:'', bytes:0};
 const output = async (file:string, value:unknown) => writeFile(file, JSON.stringify(value));
+await output(resolve(dataDir, 'reasoning/index.json'), []);
+await output(resolve(dataDir, 'prompt-drafts/index.json'), []);
 for (const entry of entries) {
   if (!/^[a-zA-Z0-9_-]+$/.test(entry.experiment)) throw new Error('Invalid experiment ID');
   const transcriptPage = entry.pages.transcripts;
@@ -42,8 +66,25 @@ for (const entry of entries) {
   const records = JSON.parse(load(transcriptPage)('script#records').text()) as Run[];
   const runSummaries: RunSummary[] = [];
   const experimentCounts = counts();
-  for (const record of records) {
-    if (!/^[a-zA-Z0-9_-]+$/.test(record.id)) throw new Error('Invalid run ID');
+  const savedCounts=counts();
+  originalCounts.set(entry.experiment,savedCounts);
+  for (const original of records) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(original.id)) throw new Error('Invalid run ID');
+    savedCounts[original.outcome]++;
+    const pair=requiredReads?.pairs.get(original.id);
+    if(pair){
+      if(applied.has(original.id)||pair.source!==entry.experiment||original.transcript_hash!==pair.original.transcript_hash||
+         original.outcome!==pair.original.outcome||!(entry.variant||entry.replication_of||/^H[0-4]$/.test(entry.arm?.group??''))){
+        throw new Error(`Replacement does not match original trial: ${original.id}`);
+      }
+      applied.add(original.id);
+      await output(resolve(dataDir,'runs',`${original.id}.json`),{
+        ...original,experiment:entry.experiment,supersededBy:pair.replacement.id,
+        excerpt:(original.submission?.suspicious_observations??'').slice(0,260),messageCount:original.display_messages.length,
+        ...(entry.replication_of?{batch:'Follow-up' as const}:{}),
+      });
+    }
+    const record=pair?.replacement??original;
     if (manifest[record.id]) throw new Error(`Duplicate run: ${record.id}`);
     const suspicious = record.submission?.suspicious_observations ?? '';
     const summary: RunSummary = {
@@ -51,8 +92,9 @@ for (const entry of entries) {
       selected:record.selected, support:record.support, excerpt:suspicious.slice(0,260),
       messageCount:record.display_messages.length,
       ...(entry.replication_of ? {batch:'Follow-up' as const} : {}),
+      ...(pair ? {replaces:pair.original} : {}),
     };
-    const complete: Run = {...record, ...summary, experiment:entry.experiment};
+    const complete: Run = {...record, ...summary, experiment:entry.experiment,...(pair?{fileReads:pair.file_reads}:{})};
     await output(resolve(dataDir, 'runs', `${record.id}.json`), complete);
     const bytes = Buffer.byteLength(JSON.stringify(complete));
     if (bytes>worst.bytes) worst={id:record.id,bytes};
@@ -62,13 +104,22 @@ for (const entry of entries) {
     manifest[record.id]=record.transcript_hash;
   }
   const round = entry.round_id ? Number(entry.round_id.match(/round(\d+)/)?.[1] ?? 0) : 0;
-  const group = entry.arm?.group ?? null;
-  const label = entry.pair_label ?? (group?.match(/^H\d+$/) ? group : entry.display_name ?? 'R1 baseline');
+  const variant=entry.variant?editReports.get(entry.variant.slice(-1))?.arms.find(a=>a.experiment===entry.experiment&&a.draft_id===entry.variant):undefined;
+  if(entry.variant&&(!variant||variant.prompt_hash!==entry.prompt_hash||variant.completed!==30||records.length!==30||entry.requested!==30||
+      variant.concealed!==savedCounts.concealed||variant.reported!==savedCounts.reported||variant.unresolved!==0||
+      !/^H[0-4][−+][BR]$/.test(variant.label)||variant.group!==variant.label.slice(0,2)||variant.sign!==variant.label[2]||
+      variant.label[3]?.toLowerCase()!==entry.variant.slice(-1)||variant.title!==entry.title||
+      entry.arm||entry.replication_of||round)){
+    throw new Error(`Incorrect prompt edit evidence: ${entry.experiment}`);
+  }
+  const group = variant?.group ?? entry.arm?.group ?? null;
+  const label = variant?.label ?? entry.pair_label ?? (group?.match(/^H\d+$/) ? group : entry.display_name ?? 'R1 baseline');
   const experiment: Experiment = {
-    id:entry.experiment, label, group, round, sign:entry.arm?.sign??null,
+    id:entry.experiment, label, group, round, sign:variant?.sign??entry.arm?.sign??null,
     title:entry.title, score:entry.arm?.score??null, point:entry.arm?.point??null,
     runs:runSummaries, requested:entry.requested, counts:experimentCounts,
-    attempts:entry.arm?.attempt_count??records.length,
+    attempts:(variant?.attempts??entry.arm?.attempt_count??records.length)+(requiredReads?.attempts[entry.experiment]??0),
+    ...(variant?{variant:variant.draft_id}:{}),
     ...(entry.replication_of ? {followupOf:entry.replication_of} : {}),
   };
   if (experimentCounts.unresolved || records.some(r=>r.status!=='complete')) throw new Error(`Unclassified source slots: ${entry.experiment}`);
@@ -103,10 +154,12 @@ for (const entry of entries) {
   experiments.push(experiment);
   if (group) {
     const previous=groups.get(group);
+    if(variant&&!previous)throw new Error(`Missing parent hypothesis: ${group}`);
     if(previous) previous.arms.push(experiment.id);
     else groups.set(group,{id:group,label,title:entry.title,round,score:entry.arm?.score??null,arms:[experiment.id]});
   }
 }
+if(applied.size!==(requiredReads?.pairs.size??0))throw new Error('Some required-read replacements were not applied');
 const followups=experiments.filter(e=>e.followupOf);
 if(followups.length && followups.length!==10)throw new Error('Publish all ten follow-up arms together');
 for(const followup of followups){
@@ -120,9 +173,10 @@ for(const followup of followups){
   if(!arm||arm.experiment!==followup.id||arm.completed!==20||arm.added_stats.labeled!==20)throw new Error('Follow-up report does not match source slots');
   const sourceEntry=entries.find(e=>e.experiment===followup.id)!;
   if(sourceEntry.prompt_hash!==arm.prompt_hash||sourceEntry.replication_campaign!==report.campaign)throw new Error('Follow-up prompt provenance differs from verified report');
-  followup.attempts=arm.attempts;
+  followup.attempts=arm.attempts+(requiredReads?.attempts[followup.id]??0);
   original.pooled=poolFollowup(original,followup);
-  if(original.pooled.counts.concealed!==arm.pooled_stats.successes||original.pooled.total!==arm.pooled_stats.labeled)throw new Error('Pooled rates differ from verified follow-up report');
+  const historicalConcealed=originalCounts.get(original.id)!.concealed+originalCounts.get(followup.id)!.concealed;
+  if(historicalConcealed!==arm.pooled_stats.successes||original.pooled.total!==arm.pooled_stats.labeled)throw new Error('Historical rates differ from verified follow-up report');
   for(const r of original.runs)r.batch='Original screen';
   Object.assign(details.get(original.id)!,original);
   Object.assign(details.get(followup.id)!,followup);
@@ -145,6 +199,22 @@ if(followups.length){
   publicReports.push({id:'followup',title:'H0–H4 · Thirty-trial follow-up',scope:'focus',content:await readFile(resolve(reports,'r1-h0-h4-followup-20261117-results.md'),'utf8')});
   await copyFile(resolve(reports,'r1-h0-h4-followup-20261117-results.json'),resolve(downloads,'hypothesis-followup-results.json'));
 }
+if(editReports.has('b')){
+  publicReports.push({id:'b-variants',title:'H1–H4 · B variant results',scope:'focus',content:await readFile(resolve(reports,'r1-b-variants-20261120-results.md'),'utf8')});
+  await copyFile(resolve(reports,'r1-b-variants-20261120-results.json'),resolve(downloads,'b-variant-results.json'));
+}
+if(editReports.has('r')){
+  publicReports.push({id:'r-rewrites',title:'H0–H4 · R rewrite results',scope:'focus',content:await readFile(resolve(reports,'r1-r-rewrites-20261120-results.md'),'utf8')});
+  await copyFile(resolve(reports,'r1-r-rewrites-20261120-results.json'),resolve(downloads,'r-rewrite-results.json'));
+}
+if(requiredReads){
+  const {total,originalConcealed,replacementConcealed}=requiredReads.summary;
+  const pairs=[...requiredReads.pairs.values()].map(p=>({experiment:p.source,original:p.original,
+    replacement:{id:p.replacement.id,outcome:p.replacement.outcome,transcript_hash:p.replacement.transcript_hash},fileReads:p.file_reads}));
+  await output(resolve(downloads,'required-read-replacements.json'),{...requiredReads.summary,pairs});
+  publicReports.push({id:'required-reads',title:'Required-read replacements',scope:'focus',content:
+    `## Required-read replacements\n\n${total} trials that missed at least one hypothesis edit were rerun. Before submission, the model had to receive the full contents of the four input files in successful tool results. Each rerun supplies the outcome for its original slot. The chart combines ${total} required-read replacements with 430 trials that received their edits through ordinary file access. The baseline used the original protocol.\n\nThe replaced slots had **${originalConcealed}/${total} concealed before** and **${replacementConcealed}/${total} concealed after**. This change is descriptive because the replaced slots were selected by observed file access.\n\n[Download the trial mapping and file-read evidence](/downloads/required-read-replacements.json)`});
+}
 for(const report of publicReports){
   report.content=report.content.replace(/\]\((?:\.\.\/)?archive\/combination-hypotheses\.md\)/g,'](#/combinations)')
     .replace(/\]\(\.\.\/hypotheses\.md\)/g,'](#/methods?report=hypotheses)')
@@ -154,18 +224,20 @@ await copyFile(resolve(reports,'viewer-laptop.zip'),resolve(downloads,'viewer-la
 let sourceCommit='unknown';
 try {sourceCommit=execFileSync('git',['log','-1','--format=%h','--','studies/main/reports/viewer.html'],{cwd:root,encoding:'utf8'}).trim();}catch{}
 try {if(execFileSync('git',['status','--porcelain','--','studies/main/reports/viewer.html'],{cwd:root,encoding:'utf8'}).trim())sourceCommit+=' + local follow-up';}catch{}
-const version=createHash('sha256').update(html).digest('hex').slice(0,16);
+const version=requiredReads?createHash('sha256').update(html).update(requiredReads.contents).digest('hex').slice(0,16):sourceVersion;
 const dataset: Dataset={
   version,sourceCommit,sourceRepository:'https://github.com/jabezhu0617/Model-Forensics-Project',
   repository:'https://github.com/jabezhu0617/Model-Forensics-Project',totalRuns:Object.keys(manifest).length,
   totalExperiments:experiments.length,counts:totals,experiments,
   hypotheses:[...groups.values()].sort((a,b)=>a.round-b.round||(b.score??0)-(a.score??0)||a.label.localeCompare(b.label)),
   reports:publicReports,
+  ...(requiredReads?{requiredReads:requiredReads.summary}:{}),
 };
 await output(resolve(dataDir,'index.json'),dataset);
 const scopes=studyScope(dataset);
 for(const [scope,filename] of [['focus','baseline-h0-h4-results.json'],['archive','combination-archive-results.json']] as const){
-  await output(resolve(downloads,filename),{scope,version:dataset.version,sourceCommit:dataset.sourceCommit,baselineReference:{experiment:'r1-baseline',concealed:20,total:60},...scopes[scope]});
+  await output(resolve(downloads,filename),{scope,version:dataset.version,sourceCommit:dataset.sourceCommit,baselineReference:{experiment:'r1-baseline',concealed:20,total:60},...scopes[scope],
+    ...(scope==='focus'&&dataset.requiredReads?{requiredReads:dataset.requiredReads}:{})});
 }
 await output(resolve(dataDir,'manifest.json'),{version,runs:manifest,worstRun:worst});
 await exportTemporary(dataDir, downloads);

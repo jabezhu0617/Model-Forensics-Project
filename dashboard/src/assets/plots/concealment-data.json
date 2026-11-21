@@ -1,6 +1,6 @@
 {
   "renderer": "Matplotlib 3.9.4",
-  "dataset_version": "bf5adf7ea894e6e1",
+  "dataset_version": "626355a9d03eaa00",
   "bars": [
     {
       "experiment": "r1-baseline",
@@ -15,6 +15,7 @@
         "lower": 0.22729261523522676,
         "upper": 0.459431335478803
       },
+      "label": null,
       "sources": [
         "r1-baseline"
       ]
@@ -26,15 +27,34 @@
       "count": 3,
       "total": 30,
       "rate": 10.0,
-      "x": 0.8200000000000001,
+      "x": 0.7,
       "interval95": {
         "method": "Wilson",
         "lower": 0.03459988874733419,
         "upper": 0.25621082579184085
       },
+      "label": null,
       "sources": [
         "r1-reason-screen-v2",
         "r1-h0-h4-followup-20261117-h0-decrease"
+      ]
+    },
+    {
+      "experiment": "r1-rewrite-h0-minus-r",
+      "group": "H0",
+      "series": "negative-rewrite",
+      "count": 1,
+      "total": 30,
+      "rate": 3.3333333333333335,
+      "x": 0.9,
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.005908590381612455,
+        "upper": 0.16670390991409173
+      },
+      "label": "H0\u2212R",
+      "sources": [
+        "r1-rewrite-h0-minus-r"
       ]
     },
     {
@@ -44,15 +64,34 @@
       "count": 7,
       "total": 30,
       "rate": 23.333333333333332,
-      "x": 1.18,
+      "x": 1.1,
       "interval95": {
         "method": "Wilson",
         "lower": 0.11792388144489496,
         "upper": 0.40928326158122164
       },
+      "label": null,
       "sources": [
         "r1-h0-firmer-moral-judgment",
         "r1-h0-h4-followup-20261117-h0-increase"
+      ]
+    },
+    {
+      "experiment": "r1-rewrite-h0-plus-r",
+      "group": "H0",
+      "series": "positive-rewrite",
+      "count": 8,
+      "total": 30,
+      "rate": 26.666666666666668,
+      "x": 1.3,
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.14182663319596317,
+        "upper": 0.4444796169518888
+      },
+      "label": "H0+R",
+      "sources": [
+        "r1-rewrite-h0-plus-r"
       ]
     },
     {
@@ -62,33 +101,71 @@
       "count": 0,
       "total": 30,
       "rate": 0.0,
-      "x": 1.82,
+      "x": 1.7,
       "interval95": {
         "method": "Wilson",
         "lower": 0,
         "upper": 0.11351339317396876
       },
+      "label": null,
       "sources": [
         "r1-h1-tutor-selection",
         "r1-h0-h4-followup-20261117-h1-decrease"
       ]
     },
     {
+      "experiment": "r1-variant-h1-minus-b",
+      "group": "H1",
+      "series": "negative-variant",
+      "count": 0,
+      "total": 30,
+      "rate": 0.0,
+      "x": 1.9,
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0,
+        "upper": 0.11351339317396876
+      },
+      "label": "H1\u2212B",
+      "sources": [
+        "r1-variant-h1-minus-b"
+      ]
+    },
+    {
       "experiment": "r1-h1-civilian-harm-rescreen",
       "group": "H1",
       "series": "positive",
-      "count": 7,
+      "count": 3,
       "total": 30,
-      "rate": 23.333333333333332,
-      "x": 2.18,
+      "rate": 10.0,
+      "x": 2.1,
       "interval95": {
         "method": "Wilson",
-        "lower": 0.11792388144489496,
-        "upper": 0.40928326158122164
+        "lower": 0.03459988874733419,
+        "upper": 0.25621082579184085
       },
+      "label": null,
       "sources": [
         "r1-h1-civilian-harm-rescreen",
         "r1-h0-h4-followup-20261117-h1-increase"
+      ]
+    },
+    {
+      "experiment": "r1-variant-h1-plus-b",
+      "group": "H1",
+      "series": "positive-variant",
+      "count": 3,
+      "total": 30,
+      "rate": 10.0,
+      "x": 2.3,
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.03459988874733419,
+        "upper": 0.25621082579184085
+      },
+      "label": "H1+B",
+      "sources": [
+        "r1-variant-h1-plus-b"
       ]
     },
     {
@@ -98,15 +175,34 @@
       "count": 0,
       "total": 30,
       "rate": 0.0,
-      "x": 2.82,
+      "x": 2.7,
       "interval95": {
         "method": "Wilson",
         "lower": 0,
         "upper": 0.11351339317396876
       },
+      "label": null,
       "sources": [
         "r1-h2-ease-motivation",
         "r1-h0-h4-followup-20261117-h2-decrease"
+      ]
+    },
+    {
+      "experiment": "r1-variant-h2-minus-b",
+      "group": "H2",
+      "series": "negative-variant",
+      "count": 0,
+      "total": 30,
+      "rate": 0.0,
+      "x": 2.9,
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0,
+        "upper": 0.11351339317396876
+      },
+      "label": "H2\u2212B",
+      "sources": [
+        "r1-variant-h2-minus-b"
       ]
     },
     {
@@ -116,15 +212,34 @@
       "count": 6,
       "total": 30,
       "rate": 20.0,
-      "x": 3.18,
+      "x": 3.1,
       "interval95": {
         "method": "Wilson",
         "lower": 0.0950510717728987,
         "upper": 0.3730569641314825
       },
+      "label": null,
       "sources": [
         "r1-h2-expanded-moral-case",
         "r1-h0-h4-followup-20261117-h2-increase"
+      ]
+    },
+    {
+      "experiment": "r1-rewrite-h2-plus-r",
+      "group": "H2",
+      "series": "positive-rewrite",
+      "count": 10,
+      "total": 30,
+      "rate": 33.33333333333333,
+      "x": 3.3,
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.19230498083676134,
+        "upper": 0.5121994835545616
+      },
+      "label": "H2+R",
+      "sources": [
+        "r1-rewrite-h2-plus-r"
       ]
     },
     {
@@ -134,15 +249,34 @@
       "count": 4,
       "total": 30,
       "rate": 13.333333333333334,
-      "x": 3.82,
+      "x": 3.7,
       "interval95": {
         "method": "Wilson",
         "lower": 0.053096554840547455,
         "upper": 0.296813266820363
       },
+      "label": null,
       "sources": [
         "r1-h3-external-author",
         "r1-h0-h4-followup-20261117-h3-decrease"
+      ]
+    },
+    {
+      "experiment": "r1-variant-h3-minus-b",
+      "group": "H3",
+      "series": "negative-variant",
+      "count": 6,
+      "total": 30,
+      "rate": 20.0,
+      "x": 3.9,
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.0950510717728987,
+        "upper": 0.3730569641314825
+      },
+      "label": "H3\u2212B",
+      "sources": [
+        "r1-variant-h3-minus-b"
       ]
     },
     {
@@ -152,51 +286,108 @@
       "count": 19,
       "total": 30,
       "rate": 63.33333333333333,
-      "x": 4.18,
+      "x": 4.1,
       "interval95": {
         "method": "Wilson",
         "lower": 0.4551356365479487,
         "upper": 0.7812607919389929
       },
+      "label": null,
       "sources": [
         "r1-h3-prior-self-commitment",
         "r1-h0-h4-followup-20261117-h3-increase"
       ]
     },
     {
+      "experiment": "r1-rewrite-h3-plus-r",
+      "group": "H3",
+      "series": "positive-rewrite",
+      "count": 12,
+      "total": 30,
+      "rate": 40.0,
+      "x": 4.3,
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.24590628116801852,
+        "upper": 0.5767963974667752
+      },
+      "label": "H3+R",
+      "sources": [
+        "r1-rewrite-h3-plus-r"
+      ]
+    },
+    {
       "experiment": "r1-h4-china-affiliation",
       "group": "H4",
       "series": "negative",
-      "count": 11,
+      "count": 6,
       "total": 30,
-      "rate": 36.666666666666664,
-      "x": 4.82,
+      "rate": 20.0,
+      "x": 4.7,
       "interval95": {
         "method": "Wilson",
-        "lower": 0.21873920806100708,
-        "upper": 0.5448643634520511
+        "lower": 0.0950510717728987,
+        "upper": 0.3730569641314825
       },
+      "label": null,
       "sources": [
         "r1-h4-china-affiliation",
         "r1-h0-h4-followup-20261117-h4-decrease"
       ]
     },
     {
+      "experiment": "r1-variant-h4-minus-b",
+      "group": "H4",
+      "series": "negative-variant",
+      "count": 4,
+      "total": 30,
+      "rate": 13.333333333333334,
+      "x": 4.9,
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.053096554840547455,
+        "upper": 0.296813266820363
+      },
+      "label": "H4\u2212B",
+      "sources": [
+        "r1-variant-h4-minus-b"
+      ]
+    },
+    {
       "experiment": "r1-h4-us-coalition-against-china",
       "group": "H4",
       "series": "positive",
+      "count": 5,
+      "total": 30,
+      "rate": 16.666666666666664,
+      "x": 5.1,
+      "interval95": {
+        "method": "Wilson",
+        "lower": 0.0733654237184855,
+        "upper": 0.3356435050641603
+      },
+      "label": null,
+      "sources": [
+        "r1-h4-us-coalition-against-china",
+        "r1-h0-h4-followup-20261117-h4-increase"
+      ]
+    },
+    {
+      "experiment": "r1-rewrite-h4-plus-r",
+      "group": "H4",
+      "series": "positive-rewrite",
       "count": 6,
       "total": 30,
       "rate": 20.0,
-      "x": 5.18,
+      "x": 5.3,
       "interval95": {
         "method": "Wilson",
         "lower": 0.0950510717728987,
         "upper": 0.3730569641314825
       },
+      "label": "H4+R",
       "sources": [
-        "r1-h4-us-coalition-against-china",
-        "r1-h0-h4-followup-20261117-h4-increase"
+        "r1-rewrite-h4-plus-r"
       ]
     }
   ],
@@ -205,6 +396,6 @@
     "rate": 33.33333333333333,
     "style": "dotted"
   },
-  "svg_sha256": "10fa66803c911747c78063d069de357c6285c057b405b04312a5fde26142890e",
-  "png_sha256": "8abbce0bef7b53aad4f9afc5922dd8738b2165a38301b90a4965855c9fb30305"
+  "svg_sha256": "39fa991a383d0d57dffbbb816bf92fcffdf884d3680c4d28ee5cb7c418af9563",
+  "png_sha256": "378848c78750a71d12940f8af3b0e5dcdfb6054d3936aa3c17103275bb882c19"
 }

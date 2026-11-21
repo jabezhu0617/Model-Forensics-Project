@@ -13,6 +13,7 @@ onMounted(async()=>{try{data.value=await dataset();}catch(e){error.value=String(
       <nav class="primary-nav" aria-label="Main navigation">
         <RouterLink to="/" :class="{active:$route.path==='/'}"><span>◫</span> Results overview</RouterLink>
         <RouterLink to="/experiment/r1-baseline" :class="{active:$route.path.includes('r1-baseline')}"><span>◷</span> Baseline study</RouterLink>
+        <RouterLink to="/prompt-drafts" :class="{active:$route.path.startsWith('/prompt-drafts')}"><span>▧</span> Prompt drafts</RouterLink>
         <RouterLink to="/examples" :class="{active:$route.path.startsWith('/examples')}"><span>≋</span> Temp transcripts</RouterLink>
         <RouterLink to="/methods" :class="{active:$route.path==='/methods'}"><span>≡</span> Methods & exports</RouterLink>
         <RouterLink to="/combinations" class="archive-link" :class="{active:$route.path==='/combinations'}"><span>▤</span> Combination archive</RouterLink>

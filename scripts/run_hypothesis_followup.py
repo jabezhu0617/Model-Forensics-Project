@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import traceback
 from collections import Counter, deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -42,7 +43,17 @@ STARTS = threading.BoundedSemaphore(6)
 class FastStudy(Study):
     def attempts(self, experiment):
         return [r for p in sorted((self.root / "runs").glob(experiment + "-*.json"))
-                if (r := read(p))["experiment"] == experiment]
+                if (r := self._read_attempt(p))["experiment"] == experiment]
+
+    @staticmethod
+    def _read_attempt(path):
+        for delay in (0.01, 0.05, 0.2, 1, None):
+            try:
+                return read(path)
+            except PermissionError:
+                if delay is None:
+                    raise
+                time.sleep(delay)
 
 
 class TrialSandbox(DockerSandbox):
@@ -156,14 +167,18 @@ def run_slot(study, experiment, index, attempt):
                    TrialSandbox(experiment["settings"]), attempt)
 
 
-def run(study, manifest, workers, max_attempts):
+def run(study, manifest, workers, max_attempts, *, slots=20, report=summary, emit=event):
     DockerSandbox.preflight("python:3.11-slim")
     Client(study.config["models"]["r1"])
     experiments = {a["experiment"]: study.get("experiments", a["experiment"]) for a in manifest["arms"]}
+    targets = {eid: slots if slots is not None else exp["count"] for eid, exp in experiments.items()}
     prior = {key: {r["index"]: r for r in study.runs(key)} for key in experiments}
     jobs = deque()
-    for index in range(1, 21):
+    requested = sum(targets.values())
+    for index in range(1, max(targets.values()) + 1):
         for eid, experiment in experiments.items():
+            if index > targets[eid]:
+                continue
             previous = prior[eid].get(index)
             if previous and previous["status"] == "complete":
                 continue
@@ -172,10 +187,10 @@ def run(study, manifest, workers, max_attempts):
             attempt = previous["attempt"] + 1 if previous else 1
             if attempt <= max_attempts:
                 jobs.append((experiment, index, attempt))
-    notified = set()
+    notified = {eid for eid, rows in prior.items() if sum(r["status"] == "complete" for r in rows.values()) == targets[eid]}
     done = sum(sum(r["status"] == "complete" for r in rows.values()) for rows in prior.values())
     counts = Counter({eid: sum(r["status"] == "complete" for r in rows.values()) for eid, rows in prior.items()})
-    event(study, "started", workers=workers, remaining=len(jobs), requested=200)
+    emit(study, "started", workers=workers, remaining=len(jobs), requested=requested)
     active, stopped = {}, False
     with ThreadPoolExecutor(max_workers=workers) as pool:
         try:
@@ -187,7 +202,7 @@ def run(study, manifest, workers, max_attempts):
                     active[pool.submit(run_slot, study, exp, index, attempt)] = exp, index, attempt
                 ready, _ = wait(active, timeout=30, return_when=FIRST_COMPLETED)
                 if not ready:
-                    event(study, "heartbeat", completed=done, active=len(active), queued=len(jobs))
+                    emit(study, "heartbeat", completed=done, active=len(active), queued=len(jobs))
                 for future in ready:
                     exp, index, attempt = active.pop(future)
                     try:
@@ -199,38 +214,37 @@ def run(study, manifest, workers, max_attempts):
                         path = study.path("runs", run_id)
                         if not path.exists():
                             raise
-                        record = read(path)
+                        record = study._read_attempt(path)
                         if record["status"] not in {"complete", "failed", "incomplete"}:
                             raise
-                        event(study, "worker_cleanup_error", run=run_id, error_type=type(error).__name__)
+                        emit(study, "worker_cleanup_error", run=run_id, error_type=type(error).__name__)
                     if record["status"] == "complete":
                         assert record["transcript_hash"] == digest(record["messages"])
                         done += 1
                         counts[exp["id"]] += 1
                     else:
                         path = study.root / "sealed" / record["id"] / "error.json"
-                        message = read(path).get("message", "") if path.exists() else ""
+                        message = study._read_attempt(path).get("message", "") if path.exists() else ""
                         if re.search(r"Provider HTTP (401|402|403|404)", message):
                             stopped = True
-                            event(study, "provider_blocked", action="draining active trials; credentials/model/balance need attention")
+                            emit(study, "provider_blocked", action="draining active trials; credentials/model/balance need attention")
                         elif attempt < max_attempts:
                             jobs.append((exp, index, attempt + 1))
-                    event(study, "trial_finished", completed=done, run=record["id"],
+                    emit(study, "trial_finished", completed=done, run=record["id"],
                           status=record["status"], outcome=record["outcome"])
-                    if counts[exp["id"]] == 20 and exp["id"] not in notified:
+                    if counts[exp["id"]] == targets[exp["id"]] and exp["id"] not in notified:
+                        stats = report(study, manifest)
+                        emit(study, "arm_batch_complete", **next(a for a in stats["arms"] if a["experiment"] == exp["id"]))
                         notified.add(exp["id"])
-                        arm = next(a for a in manifest["arms"] if a["experiment"] == exp["id"])
-                        stats = summary(study, manifest)
-                        event(study, "arm_batch_complete", **next(a for a in stats["arms"] if a["experiment"] == exp["id"]))
                 if ready:
-                    summary(study, manifest)
+                    report(study, manifest)
         except BaseException:
             traceback.print_exc()
             raise
-    stats = summary(study, manifest)
-    event(study, "finished", completed=stats["completed"], classified=stats["classified"],
+    stats = report(study, manifest)
+    emit(study, "finished", completed=stats["completed"], classified=stats["classified"],
           total_attempts=stats["total_attempts"])
-    return 0 if stats["completed"] == stats["classified"] == 200 else 2
+    return 0 if stats["completed"] == stats["classified"] == requested else 2
 
 
 def main():

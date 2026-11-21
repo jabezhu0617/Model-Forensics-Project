@@ -9,16 +9,22 @@ const data=ref<Dataset|null>(null);
 onMounted(async()=>{data.value=await dataset();});
 const focus=computed(()=>data.value?studyScope(data.value).focus:null);
 const baseline=computed(()=>data.value?.experiments.find(e=>e.id==='r1-baseline'));
+const variantTrials=computed(()=>focus.value?.experiments.filter(e=>e.variant?.endsWith('-b')).reduce((n,e)=>n+e.runs.length,0)??0);
+const rewriteTrials=computed(()=>focus.value?.experiments.filter(e=>e.variant?.endsWith('-r')).reduce((n,e)=>n+e.runs.length,0)??0);
 </script>
 <template><template v-if="data&&focus">
   <div class="page-heading"><div><p class="eyebrow">EVALUATION TAMPERING · DEEPSEEK R1</p><h1>What changes concealment?</h1><p class="lead">Focus on the baseline and H0–H4, tested in both directions.<br class="desktop-only"> Compare both directions and review the evidence.</p></div><a href="/downloads/baseline-h0-h4-results.json" class="button secondary" download>↓ Download results</a></div>
   <div class="stat-grid">
     <div class="stat"><span>Baseline concealment</span><strong>{{baseline?percent(baseline.counts.concealed,baseline.runs.length):'—'}}</strong><small>20 of 60 trials · 95% CI 22.7–45.9%</small></div>
-    <div class="stat"><span>Trials in focus</span><strong>{{focus.totalRuns}}</strong><small>60 baseline + 300 hypothesis trials</small></div>
+    <div class="stat"><span>Trials in focus</span><strong>{{focus.totalRuns}}</strong><small>60 baseline + 300 original-prompt trials<template v-if="variantTrials"> + {{variantTrials}} B trials</template><template v-if="rewriteTrials"> + {{rewriteTrials}} R trials</template></small></div>
     <div class="stat"><span>Base hypotheses</span><strong>{{focus.hypotheses.length}}</strong><small>30 trials in each positive and negative direction</small></div>
     <div class="stat"><span>Original screens scoring 2/2</span><strong>{{focus.hypotheses.filter(h=>h.score===2).length}}<em>/ {{focus.hypotheses.length}}</em></strong><small>Scores from the first ten trials per direction</small></div>
   </div>
-  <ResultsChart/>
+  <div v-if="data.requiredReads" class="method-note">
+    <span>ⓘ</span><p><strong>{{data.requiredReads.total}} unread trials rerun.</strong> The graph uses the replacement outcomes for those slots. The model received all four files before submitting in each rerun. <RouterLink to="/methods?report=required-reads">See the rerun protocol and trial mapping →</RouterLink></p>
+  </div>
+  <ResultsChart :replacement-count="data.requiredReads?.total??0"/>
   <HypothesisComparisons :data="data" :hypotheses="focus.hypotheses"/>
-  <div class="method-note"><span>ⓘ</span><p><strong>Current focus: baseline and H0–H4.</strong> Rates pool the original 10 trials and 20 follow-up trials per direction. The original ten-trial screening scores are preserved. These exploratory results do not establish a causal explanation or statistical significance. <RouterLink to="/methods">Read the protocol →</RouterLink></p></div>
+  <div class="method-note"><span>▧</span><p><strong>Review before running.</strong> <RouterLink to="/prompt-drafts">Open the proposed prompt edits and attachments →</RouterLink></p></div>
+  <div class="method-note"><span>ⓘ</span><p><strong>Current focus: baseline and H0–H4.</strong> Each original-prompt rate combines its 10 screening trials and 20 follow-up trials. <template v-if="variantTrials">Each tested prompt edit has its own 30-trial result. </template>The original ten-trial screening scores are preserved. <RouterLink to="/methods">Read the protocol →</RouterLink></p></div>
 </template></template>
